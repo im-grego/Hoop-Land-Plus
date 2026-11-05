@@ -752,6 +752,9 @@ export function cpuPick(team, available, valueOf = p => prospectValue(p), rng = 
 // College stats and team fit
 
 // Last college season, per game: { yr, team, gp, mpg, pts, reb, ast, stl, blk, tov, fg, tp, ft, tpa }.
+// A made-up season (madeprod.js) for a prospect the save has no college stats for; the app sets the lookup.
+let madeLineOf = null;
+export const setMadeLines = f => { madeLineOf = f; };
 export function collegeLine(p, leagues) {
   let best = null;
   (p.stats || []).forEach(s => {
@@ -774,7 +777,7 @@ export function collegeLine(p, leagues) {
       };
     }
   });
-  return best;
+  return best || (madeLineOf ? madeLineOf(p) : null);
 }
 
 // Where a skill line would rank on a roster: overall and within the role.

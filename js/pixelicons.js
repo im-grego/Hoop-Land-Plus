@@ -117,6 +117,10 @@ const MAP = {
   '🌴': 'palm',
   '⚠': 'warn', '🚨': 'warn', '⚔': 'dagger', '🔪': 'dagger', '🎟': 'ticket', '🌟': 'star', '💫': 'star', '🎉': 'star', '💯': 'star', '💎': 'star', '🪄': 'star', '🙏': 'smile', '📈': 'chart', '📉': 'chart', '📏': 'chart', '📐': 'chart', '🏁': 'flag', '🏳': 'flag', '🤐': 'meh', '❤': 'heart', '💔': 'heart', '💍': 'ring', '🌱': 'sprout', '🐣': 'sprout', '👶': 'sprout', '📍': 'pin', '📌': 'pin', '🏃': 'person', '🧘': 'person', '🧑‍💼': 'person', '👨‍🍳': 'person', '👋': 'thumb', '🙌': 'thumb', '🍽': 'gift', '🍩': 'gift', '🍳': 'gift', '🥤': 'gift', '🍔': 'gift', '🥗': 'gift', '🧈': 'gift', '🎛': 'sliders', '🕹': 'sliders', '🎮': 'sliders', '🧪': 'flask', '🧬': 'flask', '🫡': 'smile', '😂': 'smile', '😄': 'smile', '🕶': 'smile', '📸': 'camera', '🎬': 'camera', '🎞': 'camera', '🔔': 'bell', '📱': 'phone', '🐐': 'crown', '🔱': 'crown', '❌': 'close', '👟': 'jersey', '🧦': 'shirt', '🧊': 'ice', '😤': 'angry', '😡': 'angry', '😒': 'meh', '🙄': 'meh', '😞': 'meh', '🤔': 'meh', '😬': 'meh', '🙉': 'meh', '🤫': 'meh', '🤖': 'robot', '⚖': 'scale', '🧹': 'trash', '🪑': 'office', '🛋': 'house', '🏡': 'house', '🧠': 'books', '🛠': 'hammer', '🏗': 'hammer', '🥇': 'award', '🥈': 'award', '🌎': 'globe', '🗺': 'globe', '🧭': 'globe', '🤲': 'deal', '🫂': 'deal', '🔗': 'deal', '✋': 'no', '🛑': 'no', '🙅': 'no', '🔍': 'search', '🔭': 'search', '☁': 'import', '🦈': 'dagger', '🐍': 'skull', '🚀': 'bolt', '💥': 'bolt', '💼': 'office', '🗂': 'folder', '🛫': 'plane', '🦅': 'hawk', '🦾': 'bicep', '🚗': 'plane', '🏙': 'arena', '🌆': 'arena', '⛰': 'arena', '🥱': 'zzz', '🛌': 'zzz', '💤': 'zzz', '🔓': 'lock', '🎨': 'pen', '🔄': 'undo', '🏝': 'palm', '👨‍👦': 'team', '🪞': 'eye', '👉': 'play', '🎰': 'dice', '🧩': 'office',
   '➕': 'plus', '＋': 'plus', '✕': 'close', '×': 'close', '◀': 'left', '🎱': 'gameball',
+  // The rest, each matched to the closest icon in the set.
+  '🗳': 'note', '⬜': 'ice', '◻': 'ice', '💡': 'star', '🏫': 'cap', '🏕': 'tree', '🪙': 'money', '🖐': 'no', '🤚': 'warn',
+  '🎠': 'trade', '🌙': 'clock', '⌛': 'clock', '😊': 'smile', '😠': 'angry', '🧳': 'plane', '🍑': 'trophy', '🌊': 'pin',
+  '🌽': 'pin', '🌅': 'pin',
 };
 // One SVG per icon (a rect per run of filled pixels), as CSS masks.
 function svg(rows) {

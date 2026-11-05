@@ -1,8 +1,12 @@
 import {
-  parseSave, serializeSave, injuryHistory, ATTRS, ATTR_NAMES, PHYSICAL, attrMin, skillName, skillCategory, isEliteSkill, isFreeSkill, ELITE_REQUIREMENTS, ELITE_MIN, ATTR_MAX, activeSkills, isLeveled, CATEGORIES, SKILL_MAX_LEVEL, SKILL_CATEGORIES, POSITIONS, MODE_NAMES, phaseName, BUMP_PHASES, BUMP_DAY, POT_MIN, POT_MAX, regressionYear, injuryName, PHASE_POST_DRAFT, PHASE_PRE_DRAFT, leagueRookies, draftYear, jerseyNumber,
+  parseSave, serializeSave, injuryHistory, ATTRS, ATTR_NAMES, PHYSICAL, attrMin, skillName, skillCategory, isEliteSkill, isFreeSkill, ELITE_REQUIREMENTS, ELITE_MIN, ATTR_MAX, activeSkills, isLeveled, CATEGORIES, SKILL_MAX_LEVEL, SKILL_CATEGORIES, POSITIONS, MODE_NAMES, phaseName, BUMP_PHASES, BUMP_DAY, POT_MIN, POT_MAX, regressionYear, injuryName, PHASE_POST_DRAFT, PHASE_PRE_DRAFT, PHASE_PRE_LOTTERY, PHASE_FREE_AGENCY, leagueRookies, draftYear, jerseyNumber,
   setBlessed, playerName, heightStr, avgRating, lastSeasonMpg, leaguePlayers, snapshot, restore, diffPlayer, jerseyClashes, fixJerseyNumbers, undoJerseyNumbers, levelOf, cloneData, MINOR_INJURY, potCap, ceilTotal, canGrow,
 } from './savefile.js';
 import { collegeProduction, productionWord, setDevPlans, PLAN_ATTRS, DEFAULT_PARAMS, runProgression, buildSkillProfiles, rankSkillsFor, unlockSkill, mulberry32, runRookieBump, injuryRisk, earnsNaturalLongevity, productionScores, spendHeldPoints } from './progression.js';
+import { setMadeLines } from './draft.js';
+import { setMadeGameScores, collegeGameScore } from './progression.js';
+import { makeLines } from './madeprod.js';
+import { SCREEN_HELP, SECTION_HELP } from './helptext.js';
 import {
   SKILL_ATTRS, DRAFT_DROP, DRAFT_FLOOR, floorVector, rookieLine, ceilingVector, buildCompPool, prospectComps, prospectValue,
   lotterySetup, lotteryOdds, runLottery, drawLottery, draftOrder, teamRecord, cpuPick, tradePicks, pickValue, lotteryDone, actualDraftOrder, rookieComps,
@@ -62,10 +66,10 @@ import * as CO from './coaching.js';
 import { JERSEYS } from './jerseys.js';
 import { TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
 import { presserQuestions, presserStories, promiseStories, leagueGram, teamSituation, playerReplies, setHoldouts } from './presser.js';
-import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag } from './predraft.js';
+import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.297.1';
+const APP_VERSION = '0.301.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -179,6 +183,34 @@ function collegeZ(p) {
   return c.m.get(key).get(p.id) ?? null;
 }
 const resetCollegeZ = () => { if (state.collegeZ) state.collegeZ.m = new Map(); if (state.bodyZ) state.bodyZ.m = new Map(); };
+// Made-up production (madeprod.js): a season line for each prospect the save has no college stats for, made once for
+// the whole class (his place in it sets his role) and kept for the save, so it holds through the draft and beyond.
+const madeKey = () => `hlc:madeLines:${saveTag()}`;
+let madeCache = null;
+function madeStore() {
+  if (madeCache?.key !== madeKey()) { let m = {}; try { m = JSON.parse(localStorage.getItem(madeKey())) || {}; } catch { m = {}; } madeCache = { key: madeKey(), m }; }
+  return madeCache.m;
+}
+function makeClassLines(cls, yr, meta = labMeta()) {
+  const need = cls.filter(p => !(p.stats || []).some(s => s.league > 0 && (s.season || []).some(r => r.GP > 0)));
+  if (!need.length) return;
+  const m = madeStore();
+  // Placed against the whole class (made-up and real alike), so a real season and a made-up one sit on the same scale.
+  const lines = makeLines(cls, { yr, pedOf: p => meta[p.id]?.ped || '', salt: saveSalt() });
+  for (const p of need) if (!m[p.id]) m[p.id] = lines.get(p.id);
+  try { localStorage.setItem(madeKey(), JSON.stringify(m)); } catch { /* storage full or blocked: lines stay for this session */ }
+}
+function madeLineOf(p) {
+  if (!state.data || isCollege() || !p) return null;
+  const m = madeStore();
+  if (m[p.id]) return m[p.id];
+  const L = league();
+  if (!(L.draftClass || []).includes(p)) return null;
+  makeClassLines(L.draftClass, lastYear());
+  return m[p.id] || null;
+}
+setMadeLines(madeLineOf);
+setMadeGameScores(p => madeLineOf(p)?.gs ?? null);
 // Body: frame (strength, and weight for his height against the group's fit) and pedigree, as z within his group.
 function bodyZ(p) {
   const L = league();
@@ -526,6 +558,26 @@ function layout({ title, left = '', right = '', body, action = null, actionLeft 
     </div>`}
     <main class="panel ${bare ? 'bare' : ''}">${body}</main>
     ${action ? `<div class="bottom ${actionLeft ? 'two' : ''}">${actionLeft ? `<button class="btn action alt" data-act="${actionLeft.act}" data-id="${actionLeft.id}">${esc(actionLeft.label)}</button>` : ''}<button class="btn action" data-act="${action.act}"${action.k ? ` data-k="${esc(action.k)}"` : ''}${action.n != null ? ` data-n="${action.n}"` : ''}${action.to ? ` data-to="${esc(action.to)}"` : ''}>${esc(action.label)}</button></div>` : ''}`; });
+  addHelp(title);
+}
+
+// The ? help (helptext.js): by the screen title, and on any section whose heading has help and no ? of its own.
+const helpKey = (map, text) => Object.keys(map).find(k => text === k || text.startsWith(`${k} `) || text.startsWith(`${k} ·`) || text.startsWith(`${k}s`));
+function addHelp(title) {
+  const t = String(title || '').trim(), sk = helpKey(SCREEN_HELP, t);
+  const head = $app.querySelector('.header');
+  if (sk && head && !head.querySelector('.hdr-help')) {
+    INFO[`s:${sk}`] = SCREEN_HELP[sk];
+    head.insertAdjacentHTML('beforeend', `<button class="info-i hdr-help" data-act="infoPop" data-k="${esc(`s:${sk}`)}" aria-label="What this screen does">?</button>`);
+  }
+  for (const lg of $app.querySelectorAll('fieldset.frame > legend')) {
+    const fs = lg.parentElement;
+    if ([...fs.children].some(c => c.classList?.contains('info-i'))) continue;
+    const k = helpKey(SECTION_HELP, lg.textContent.replace(/^[^A-Za-z]+/, '').trim());
+    if (!k || (sk && SECTION_HELP[k] === SCREEN_HELP[sk])) continue;
+    INFO[`h:${k}`] = SECTION_HELP[k];
+    lg.insertAdjacentHTML('afterend', `<button class="info-i" data-act="infoPop" data-k="${esc(`h:${k}`)}" aria-label="What this means">?</button>`);
+  }
 }
 
 const BACK_ARROW = `<svg width="40" height="28" viewBox="0 0 10 7" shape-rendering="crispEdges" aria-hidden="true">
@@ -1618,20 +1670,35 @@ actions.resetProgress = async () => {
 // way every season. A save from an older version (or one the game moved on a year) whose next draft has no picks
 // marked for it gets every pick moved back a year. Either way the league always holds seven drafts of picks: a draft
 // year nobody has picks for is filled with each team's own (a single missing pick, like a forfeited one, stays gone).
+// Is this year's draft (draftYear) behind us? Only the offseason before the draft (pre-lottery to pre-draft) still has
+// it ahead; the draft and free agency, the season, the playoffs and Season Complete (champion crowned, the file not
+// yet rolled to the next year) all look to the next one. In a 2027 file at Season Complete the next draft is 2027.
+const draftBehind = (L = league()) => (L.season.phase >= PHASE_PRE_LOTTERY && L.season.phase <= PHASE_PRE_DRAFT ? 0 : 1);
 function pickWindow(L = league()) {
   if (!L || L.leagueType !== 0) return 0;
-  const dy = draftYear(L), drafted = L.season.phase >= PHASE_POST_DRAFT && L.season.phase !== 9 && L.season.phase !== 11 ? 1 : 0;
+  const dy = draftYear(L), drafted = draftBehind(L);
+  // In season, a full set marked for the draft already behind us and nothing at the far end of the window is a file an
+  // older version moved back a year by mistake: every pick moves forward a year again.
+  const inSeason = drafted && L.season.phase !== PHASE_POST_DRAFT && L.season.phase !== PHASE_FREE_AGENCY;
+  const cnt = yr => L.teams.reduce((n, t) => n + t.draftPicks.filter(pk => pk.yr === yr && pk.rd === 1).length, 0);
+  let shifted = 0;
+  if (inSeason && cnt(dy) >= L.teams.length - 2 && cnt(dy + 7) === 0) for (const t of L.teams) for (const pk of t.draftPicks) if (pk.yr >= dy) { pk.yr++; shifted++; }
+  // Picks for a draft that's already behind us are spent: clear them (a file can carry last year's set).
+  let pruned = shifted;
+  for (const t of L.teams) { const n = t.draftPicks.length; t.draftPicks = t.draftPicks.filter(pk => pk.yr >= dy + drafted); pruned += n - t.draftPicks.length; }
   const from = dy + drafted, has = (yr, rd) => L.teams.some(t => t.draftPicks.some(pk => pk.yr === yr && pk.rd === rd));
   let added = 0;
   for (let yr = from; yr < from + 7; yr++) for (const rd of [1, 2]) {
     if (has(yr, rd)) continue;
     for (const t of L.teams) { t.draftPicks.push({ pk: 0, rd, tid: t.id, otid: t.id, yr }); added++; }
   }
-  return added;
+  return added + pruned;
 }
 function repairPickYears() {
   const L = league();
-  if (!L || isCollege() || L.leagueType !== 0 || L.season.phase > PHASE_PRE_DRAFT) return 0;
+  if (!L || isCollege() || L.leagueType !== 0) return 0;
+  // The year-back relabel is for the offseason before the draft only; any other time the file's picks already line up.
+  if (draftBehind(L)) { if (pickWindow(L)) state.dirty = true; return 0; }
   const dy = draftYear(L), count = (yr, rd = 1) => L.teams.reduce((n, t) => n + t.draftPicks.filter(pk => pk.yr === yr && pk.rd === rd).length, 0);
   let moved = 0;
   // The game's picks a year ahead: this draft has none (or only the few the app's real-picks setup filed under the
@@ -1772,7 +1839,9 @@ const nextUp = () => { const st = currentStep(); if (st) toast(`Next up: ${st.ti
 // Franchise saves (one team, the game's own mode 0) skip Front Office: the
 // team is the one the save is built around, like college.
 const isFranchise = () => { const L = league(); return L.season.mode === 0 && L.teams.some(t => t.id === L.season.teamId); };
-const activeCal = () => (state.campusPro ? campusProCal() : isCollege() ? COLLEGE_CAL : CALENDAR.filter(st => (st.key !== 'office' || !(isFranchise() || CAR.isCareer(league()))) && (st.key !== 'latefa' || isComplete()) && (!['owner', 'medical', 'exhib', 'rotation', 'vote'].includes(st.key) || !CAR.isCareer(league())) && (st.key !== 'expansion' || !!expThisYear())));   // a career save runs no team
+// Paused features: steps kept in the code but out of the app until they're ready to show.
+const PAUSED = new Set(['vote']);
+const activeCal = () => (state.campusPro ? campusProCal() : isCollege() ? COLLEGE_CAL : CALENDAR.filter(st => !PAUSED.has(st.key) && (st.key !== 'office' || !(isFranchise() || CAR.isCareer(league()))) && (st.key !== 'latefa' || isComplete()) && (!['owner', 'medical', 'exhib', 'rotation', 'vote'].includes(st.key) || !CAR.isCareer(league())) && (st.key !== 'expansion' || !!expThisYear())));   // a career save runs no team
 const currentStep = () => activeCal().find(st => !st.done());
 const isStep = key => currentStep()?.key === key;
 
@@ -2126,6 +2195,9 @@ async function realClassCheck() {
   const here = new Map();
   for (const lg of state.data.seasonLeagues) for (const q of [...(lg.draftClass || []), ...lg.teams.flatMap(t => t.roster)]) if ((q.stats || []).some(st => st.league > 0)) here.set(nm(q), q);
   for (const p of cls) { const q = here.get(nm(p)); if (q) p.stats = JSON.parse(JSON.stringify(q.stats)); }
+  // No college season here (an NBA-only save, or a player not on a college roster): a made-up one, so every prospect
+  // has production to judge.
+  makeClassLines(cls, yr, meta);
   const z = collegeProduction(cls);
   const varied = RDC.varyClass(cls, CG.mulberry((saveSalt() ^ Math.imul(yr, 2654435761)) >>> 0), p => z.get(p.id) ?? null);
   for (const p of varied) { p.tid = 0; if (p.history?.draft) p.history.draft = { ...p.history.draft, yr: 0, rd: 0, pk: 0, tid: 0, otid: 0 }; }
@@ -2544,7 +2616,7 @@ function careerAgentBox(p) {
     <div class="stack">${CAR.AGENT_KEYS.map(k => { const a = CAR.CAREER_AGENTS[k]; return `<button class="btn left" data-act="careerHire" data-k="${k}"><span class="ico">${a.icon}</span><span><b>${esc(a.name)}</b> · ${esc(a.label)}<br><span class="note small">${esc(a.says)} Fee ${a.fee} coins.</span></span></button>`; }).join('')}</div></fieldset>`;
   const trust = careerStore().trust ?? CL2.TRUST_START;
   return `<fieldset class="frame"><legend>Agent</legend><p class="small">${ag.icon} <b>${esc(ag.name)}</b> · ${esc(ag.label)} <span class="muted">· paid ${ag.fee} coins to sign him · trust ${trust}/100${trust <= 35 ? ' <span class="down">(close to walking)</span>' : ''}</span></p><p class="note small">${esc(ag.says)}</p>
-    ${careerOffseason() && !cy.fired ? '<button class="btn small off" data-act="careerFire">Fire him and hire someone else</button>' : ''}</fieldset>`;
+    ${careerOffseason() && !cy.fired ? '<button class="btn small off" data-act="careerFire">Fire Him and Hire a New Coach</button>' : ''}</fieldset>`;
 }
 actions.careerHire = d => {
   const A = CAR.CAREER_AGENTS[d.k], st = careerStore();
@@ -5332,7 +5404,7 @@ screens.camp = () => {
   layout({
     title: 'Summer League',
     body: `${rookieDealsCard()}${!leagueRookies(league()).length ? '<p class="note">No rookies this year.</p>' : ageDone ? '' : ageSection()}${numbersSection(ageDone || !leagueRookies(league()).length)}${tourSection((ageDone || !leagueRookies(league()).length) && numbersReady())}`,
-    action: (ageDone || state.summerTour[state.leagueIdx]) && (state.summerTour[state.leagueIdx]?.stage || 'final') === 'final' ? { act: 'calCampBack', label: 'Wrap Up Summer League' } : null,
+    action: (ageDone || state.summerTour[state.leagueIdx]) && (state.summerTour[state.leagueIdx]?.stage || 'final') === 'final' ? { act: 'calCampBack', label: 'Wrap Up' } : null,
   });
 };
 actions.calCampBack = () => { calFlags().camp = true; state.undo = null; goHome(); toast('Next up: Free Agency'); };
@@ -8694,7 +8766,7 @@ screens.hofClass = () => {
         </fieldset>`;
       }).join('')}</div>
       ${ballot.length ? `<fieldset class="frame"><legend>On Next Year's Ballot</legend><div class="stack">${ballot.map(p => `<div class="drill-row tap" data-act="openPlayer" data-id="${p.id}"><span class="grow"><b>${esc(playerName(p))}</b> <span class="gold small">Peak ${levelOf(p)}</span><br><span class="small muted">Retired ${p.history?.yearRetired || '—'}${tot(p, 'GP') ? ` · ${avg(p, 'PTS')} / ${avg(p, 'REB')} / ${avg(p, 'AST')}` : ''}</span></span></div>`).join('')}</div></fieldset>` : ''}`,
-    action: isStep('hof') ? { act: 'hofDone', label: 'Wrap Up the Ceremony' } : null,
+    action: isStep('hof') ? { act: 'hofDone', label: 'Wrap Up' } : null,
   });
 };
 actions.hofDone = () => { calFlags().hof = true; state.undo = null; goHome(); nextUp(); };
@@ -10494,6 +10566,23 @@ function ceilKnown(p, k) {
   const reached = combineOn() || scouted(p.id) ? 2 : preDone('mock1') ? 1 : 0;
   return ceilStage(p, k) <= reached;
 }
+// What you can see of a prospect's ceiling: a range that tightens as you learn more. Wide before anything's out (8),
+// narrower once Mock 1.0 is out (6), narrower again from a scouting trip or the combine (4; the combine's athletic
+// ratings 2), and exact once revealed (ceilKnown) or after a workout. Where the true value sits inside the range is
+// fixed per save, prospect and rating, so it's never simply the middle. Returns [lo, hi] (lo === hi when known).
+function ceilRange(p, k, ceil) {
+  const now = p.attributes[k][0];
+  // Known outright: revealed, or nowhere left to go (already at the top of the scale, or a physical rating, which has
+  // no ceiling to grow into).
+  if (ceilKnown(p, k) || now >= ATTR_MAX || PHYSICAL.includes(k)) return [ceil, ceil];
+  const reached = combineOn() || scouted(p.id) ? 2 : preDone('mock1') ? 1 : 0;
+  const w = reached === 2 ? (combineOn() && COMBINE_ATTRS.has(k) ? 2 : 4) : reached === 1 ? 6 : 8;
+  const h = Math.imul((saveSalt() ^ Math.imul(p.id + 7, 2246822519) ^ Math.imul(k.charCodeAt(0) * 97 + k.charCodeAt(1), 3266489917)) >>> 0, 668265263) >>> 0;
+  const lo0 = ceil - Math.floor(h / 4294967296 * (w + 1));
+  let lo = Math.max(now, lo0), hi = Math.min(ATTR_MAX, lo0 + w);
+  if (hi === lo) hi = Math.min(ATTR_MAX, lo + 1), lo = Math.max(now, hi - 1);
+  return [lo, hi];
+}
 // Draft board value: projected ceiling at the scouted tier first, then the
 // floor, with a bonus for both (see draftScore). Vectors cached per class.
 function draftVecs() {
@@ -10970,7 +11059,7 @@ screens.capital = (args = {}) => {
   const teams = [...L.teams].sort((a, b) => (isUserTeam(b) - isUserTeam(a)) || a.shortName.localeCompare(b.shortName));
   const t = L.teams.find(x => x.id === +args.arg) || viewTeams()[0] || teams[0];
   const name = id => L.teams.find(x => x.id === id)?.shortName || '?';
-  const dy = draftYear(L) + (L.season.phase >= PHASE_POST_DRAFT && L.season.phase !== 9 && L.season.phase !== 11 ? 1 : 0);
+  const dy = draftYear(L) + draftBehind(L);
   const all = L.teams.flatMap(x => (x.draftPicks || []).filter(pk => pk.yr >= dy).map(pk => ({ holder: x, pk })));
   const years = [...new Set(all.map(x => x.pk.yr))].sort((a, b) => a - b);
   const swaps = swapLedger().filter(e => !e.done && e.yr >= dy && [e.a, e.b, e.x, e.y].includes(t.id));
@@ -11212,23 +11301,33 @@ screens.combine = (args) => {
         <div class="hg-foot"><span>❤️ ${x.likes.toLocaleString()}</span><span class="cyan">${esc(playerName(x.p))} ›</span></div>
       </button>`).join('') || '<p class="note">Quiet combine.</p>'}</div>`;
   } else if (tab === 'ath' || tab === 'shoot') {
-    // Shooting adds a total: every make out of every attempt across the drills.
-    const group = DRILLS.filter(x => x.group === tab);
-    const TOTAL = { k: 'total', short: 'Total', name: 'All Shooting Drills', n: group.reduce((a, x) => a + x.n, 0), group: 'shoot' };
-    const opts = tab === 'shoot' ? [TOTAL, ...group] : group;
-    const d = opts.find(x => x.k === args.drill) || opts[0];
-    const valOf = p => { const x = C.byId.get(p.id); return d.k === 'total' ? group.reduce((a, g) => a + (x[g.k] ?? 0), 0) : x[d.k]; };
-    const board = d.k === 'total' ? L.draftClass.map(p => ({ p, v: valOf(p) })).sort((a, b) => b.v - a.v) : C.boards[d.k];
+    // Fewer, bigger boards: four athletic tests and five shooting views (the shooting drills grouped by shot), each
+    // graded against every prospect who has ever tested (all-time percentile), with the class leader up top.
+    const D = k => DRILLS.find(x => x.k === k);
+    const combo = (k, short, name, parts) => ({ k, short, name, parts, n: parts.reduce((a, x) => a + D(x).n, 0) });
+    const shootKeys = DRILLS.filter(x => x.group === 'shoot').map(x => x.k);
+    const VIEWS = tab === 'ath'
+      ? [{ ...D('sprint'), short: 'Speed', lead: 'Fastest in the class' }, { ...D('lane'), short: 'Agility', sub: 'shuttle', lead: 'Quickest feet' },
+         { ...D('maxVert'), short: 'Vertical', sub: 'standVert', lead: 'Best bounce' }, { ...D('bench'), short: 'Strength', lead: 'Strongest' }]
+      : [{ ...combo('total', 'Overall', 'All Shooting Drills', shootKeys), lead: 'Best shooter at the combine' },
+         { ...combo('threes', 'Threes', 'Three-Point Drills (spot up, star, side)', ['spot', 'star3', 'side3']), lead: 'Best from three' },
+         { ...combo('mid', 'Midrange', 'Midrange Drills (star, side)', ['starMid', 'sideMid']), lead: 'Best in the midrange' },
+         { ...D('dribble'), short: 'Off Dribble', lead: 'Best off the bounce' }, { ...D('ft'), short: 'Free Throws', lead: 'Best at the line' }];
+    const d = VIEWS.find(x => x.k === args.drill) || VIEWS[0];
+    const valOf = p => { const x = C.byId.get(p.id); return d.parts ? d.parts.reduce((a, k) => a + (x[k] ?? 0), 0) : x[d.k]; };
+    const board = d.parts ? L.draftClass.map(p => ({ p, v: valOf(p) })).sort((a, b) => b.v - a.v) : C.boards[d.k];
     const dnp = board.filter(r => r.v == null);
     const live = board.filter(r => r.v != null), shown = args.all ? live : live.slice(0, 25);
-    // Percentile within the class: the share of the other testers he beat.
-    const vals = live.map(r => r.v);
-    const pctl = v => { const lo = d.low ? vals.filter(y => y > v).length : vals.filter(y => y < v).length; return Math.round(lo / Math.max(1, vals.length - 1) * 100); };
-    const fmt = v => `${d.n ? `${v}/${d.n}` : fmtDrill(d, v)} <span class="small muted">${ordinal(Math.max(1, Math.min(99, pctl(v))))} pct</span>`;
-    body = `<div class="drill-opts">${opts.map(x => `<button class="btn small ${x === d ? 'on focus' : 'off'}" data-act="combineDrill" data-d="${x.k}">${esc(x.short || x.name)}</button>`).join('')}</div>
-      <fieldset class="frame"><legend>${esc(d.name)}</legend><div class="stack">${shown.map((r, i) => `<div class="drill-row tap ${rank.has(r.p.id) && rank.get(r.p.id) < 30 ? 'r1' : ''}" ${rowAct(r.p)}>
+    const show = (k, v) => { const dd = D(k); return dd ? fmtDrill(dd, v) : `${v}/${d.n}`; };
+    const pctTag = (k, v, low) => { const pc = combinePct(k, v, low); if (pc == null) return ''; const [w, c] = pctTier(pc); return `<span class="small ${c}">${ordinal(pc)}${w ? ` · ${w}` : ''}</span>`; };
+    const fmt = (v, p) => { const sub = d.sub ? C.byId.get(p.id)[d.sub] : null;
+      return `${show(d.k, v)}<br>${pctTag(d.k, v, d.low)}${sub != null ? `<br><span class="small muted">${esc(D(d.sub).short)} ${fmtDrill(D(d.sub), sub)}</span>` : ''}`; };
+    const top = live[0];
+    const lead = top ? `<p class="note small gold" style="margin:6px 0">🔥 ${esc(d.lead)}: <b>${esc(playerName(top.p))}</b>, ${show(d.k, top.v)} (${ordinal(combinePct(d.k, top.v, d.low))} percentile all-time)</p>` : '';
+    body = `<div class="drill-opts"${tab === 'ath' ? ' style="grid-template-columns:repeat(4,1fr)"' : ''}>${VIEWS.map(x => `<button class="btn small ${x === d ? 'on focus' : 'off'}" data-act="combineDrill" data-d="${x.k}">${esc(x.short)}</button>`).join('')}</div>
+      ${lead}<fieldset class="frame"><legend>${esc(d.name)}</legend><div class="stack">${shown.map((r, i) => `<div class="drill-row tap ${rank.has(r.p.id) && rank.get(r.p.id) < 30 ? 'r1' : ''}" ${rowAct(r.p)}>
         <span class="pk">${i + 1}</span><span class="grow">${nameBtn(r.p)}<br><span class="small muted">${esc(posName(r.p))} · ${heightStr(r.p.ht)} · ${r.p.wt} lb</span></span>
-        <b class="drill-val">${fmt(r.v)}</b></div>`).join('')}</div>
+        <b class="drill-val" style="text-align:right">${fmt(r.v, r.p)}</b></div>`).join('')}</div>
         ${!args.all && live.length > 25 ? `<button class="btn small" data-act="combineAll" style="margin-top:8px">Show all ${live.length}</button>` : ''}
         ${dnp.length ? `<p class="note muted small" style="margin-top:8px">Did not participate: ${dnp.map(r => esc(playerName(r.p))).join(', ')}</p>` : ''}
       </fieldset>`;
@@ -11292,10 +11391,17 @@ actions.sendScout = d => {
   scoutedMap()[id] = true;
   savePre();
   state.compCache = {};   // ceilings and potential reads change
-  (state.uiTab ||= {}).prospect = 'work';   // straight to what the scouts brought back
-  render();
+  render();   // stay on the tab you were on
   const p = league().draftClass.find(x => x.id === id);
-  toast(`🔎 Scouts saw ${p ? playerName(p) : 'him'} in person`, `His athletic ceilings, a truer potential read, his play style and a combine outlook · ${tripsLeft()} trip${tripsLeft() === 1 ? '' : 's'} left`, 4200);
+  if (!p) return;
+  const sharp = [...SKILL_ATTRS, ...PHYSICAL].filter(k => ceilKnown(p, k)).length;
+  const o = combineOutlook(p);
+  const box = overlay(`<div class="info-head">🔎 Scouting Trip</div><div class="info-text">
+    <p class="small"><b>${esc(playerName(p))}</b>, seen in person. More of his ratings are clearer now: every ceiling range has tightened, and ${sharp} of ${SKILL_ATTRS.length + PHYSICAL.length} are known exactly. His potential reads truer, and his play style is in the Traits tab.</p>
+    ${o ? `<p class="small"><b>Combine preview</b>: wingspan ${inchStr(o.ws[0])}–${inchStr(o.ws[1])} (about ${o.ape >= 0 ? '+' : ''}${o.ape}") · tester <span class="${tierCls(o.ath)}">${o.skip ? 'may sit out' : esc(o.ath || '—')}</span> · shooter <span class="${tierCls(o.shoot)}">${esc(o.shoot || '—')}</span>${o.med ? ` · <span class="${o.med === 'red' ? 'down' : 'gold'}">doctors want a closer look</span>` : ''}</p>` : ''}
+    <p class="small muted">${tripsLeft()} scouting trip${tripsLeft() === 1 ? '' : 's'} left.</p></div><button class="btn" data-close>Got It</button>`);
+  box.querySelector('.box')?.classList.add('info-box');
+  box.addEventListener('click', e => { if (e.target === box || e.target.closest('[data-close]')) box.remove(); });
 };
 // What the scouts expect at the combine, from the real results with a scout's margin (fixed per save + prospect).
 const TIER_WORDS = z => z == null ? null : z >= 1 ? 'elite' : z >= 0.4 ? 'above average' : z > -0.4 ? 'about average' : z > -1 ? 'below average' : 'poor';
@@ -11335,7 +11441,7 @@ function scoutBtn(p) {
 
 // The combine on a prospect's page: one summary line, with drop-downs for the measurables and the drills.
 function combineBox(p) {
-  if (!combineOn()) return outlookBox(p);
+  if (!combineOn()) return '';   // before the combine, the scouts' preview is on the Overview tab
   const x = combineData().byId.get(p.id);
   if (!x) return '';
   const best = DRILLS.map(d => ({ d, r: posRankN(p, d) })).filter(r => r.r).sort((a, b) => a.r.rank - b.r.rank)[0];
@@ -12124,7 +12230,7 @@ function collegeBox(p) {
   const c = collegeLine(p, state.data.seasonLeagues);
   if (!c) return '';
   const f = (v, d = 1) => (v == null ? '—' : v.toFixed(d));
-  return `<fieldset class="frame"><legend>College · ${c.yr}</legend>
+  return `<fieldset class="frame"><legend>${c.made && /^Pro club/.test(c.team) ? 'Overseas' : 'College'} · ${c.yr}</legend>
     <p class="note small college-head">${COLLEGE_LOGO}<span><b>${esc(c.team)}</b><br><span class="muted">${c.gp} games · ${f(c.mpg)} MPG</span></span></p>
     <div class="statline">
       ${[['PTS', f(c.pts)], ['REB', f(c.reb)], ['AST', f(c.ast)], ['STL', f(c.stl)], ['BLK', f(c.blk)],
@@ -12132,7 +12238,7 @@ function collegeBox(p) {
         .map(([k, v], i) => i < 5 && c.li != null
           ? `<button class="stat-cell" data-act="openLeaders" data-m="college" data-k="${RANK_STATS[i][0]}" data-li="${c.li}" data-yr="${c.yr}" aria-label="College ${RANK_STATS[i][1]} leaders"><span class="muted small">${k}</span><b>${v}</b>${collegeRank(p, c, RANK_STATS[i][0])}</button>`
           : `<div><span class="muted small">${k}</span><b>${v}</b>${i < 5 ? collegeRank(p, c, RANK_STATS[i][0]) : ''}</div>`).join('')}
-    </div>${c.li != null && seasonRanks(c.yr, c.li).ranks.get(p.id)?.qualified ? (sr => `<p class="note muted small" style="margin-top:6px">Ranks among ${sr.of} qualified college players.</p>`)(seasonRanks(c.yr, c.li)) : ''}</fieldset>`;
+    </div>${c.li != null && seasonRanks(c.yr, c.li).ranks.get(p.id)?.qualified ? (sr => `<p class="note muted small" style="margin-top:6px">Ranks among ${sr.of} qualified college players.</p>`)(seasonRanks(c.yr, c.li)) : ''}${c.made ? '<p class="note muted small" style="margin-top:6px">Simulated season: this save has no college stats for him.</p>' : ''}</fieldset>`;
 }
 
 // Where the prospect would slot on each of your teams, as a rookie and at
@@ -12169,14 +12275,14 @@ screens.prospect = (args) => {
       <div class="pros-head">
         <button class="mvbtn pros-add ${onBoard(p.id) ? 'on' : ''}" data-act="toggleBoard" data-id="${p.id}" aria-label="${onBoard(p.id) ? 'Remove from' : 'Add to'} your board">${onBoard(p.id) ? '✓' : '+'}</button>
         <h2 class="team-title">${esc(playerName(p))}</h2>
-        <p class="note">${esc(collegeLine(p, state.data.seasonLeagues)?.team || 'Prospect')} · ${esc(posName(p))} · ${heightStr(p.ht)} · ${p.wt} lb</p>
+        <p class="note">${esc((c => !c ? 'Prospect' : c.made ? (/^Pro club/.test(c.team) ? c.team : 'College') : c.team)(collegeLine(p, state.data.seasonLeagues)))} · ${esc(posName(p))} · ${heightStr(p.ht)} · ${p.wt} lb</p>
         <p class="note small"><span class="age-chip">Age ${p.age} · ${classYear(p)}</span> ${state.params.readiness === 'age' ? '' : readyChip(p)}</p>
         ${(() => { const z = collegeZ(p), w = productionWord(z), b = bodyZ(p); if (!w && !b) return ''; const fw = b ? (b.frame >= 0.5 ? 'pro-ready frame' : b.frame <= -0.5 ? 'slight frame' : 'average frame') : ''; return `<p class="note small">${w ? `College production vs the ${p.pos <= 2 ? 'guards' : p.pos <= 5 ? 'wings' : 'bigs'} in his class: <b class="${z >= 0.5 ? 'up' : z <= -0.5 ? 'down' : ''}">${w}</b>` : ''}${w && fw ? ' · ' : ''}${fw ? `<span class="${b.frame >= 0.5 ? 'up' : b.frame <= -0.5 ? 'down' : 'muted'}">${fw}</span>` : ''}</p>`; })()}
         ${labStoryLine(p)}
       </div>
       ${scoutBtn(p) ? `<div style="margin-bottom:8px">${scoutBtn(p)}</div>` : ''}
       ${uiTabs('prospect', [
-        ['over', 'Overview', `<fieldset class="frame"><legend>Scouting Report</legend>${scoutList(p)}</fieldset>
+        ['over', 'Overview', `<fieldset class="frame"><legend>Scouting Report</legend>${scoutList(p)}</fieldset>${outlookBox(p)}
       <fieldset class="frame"><legend>Player Comps</legend>${compRow('Ceiling', c.ceiling)}${compRow('Floor', c.floor)}</fieldset>`],
         ['stats', 'Stats', collegeBox(p) || '<p class="note muted">No college stats on record.</p>'],
         ['game', 'Traits', `${traitsBox(p, true)}${scouted(p.id) || workoutDone(p.id) ? playStyleBox(p) : '<fieldset class="frame"><legend>Play Style</legend><p class="note small muted">Send a scout to see how he plays.</p></fieldset>'}`],
@@ -12186,15 +12292,15 @@ screens.prospect = (args) => {
         ${[...SKILL_ATTRS, ...PHYSICAL].map(k => {
           const now = p.attributes[k][0];
           const ceil = Math.min(ATTR_MAX, Math.max(now, SKILL_ATTRS.includes(k) ? cv[SKILL_ATTRS.indexOf(k)] : p.attributes[k][1]));
-          const known = ceilKnown(p, k);
+          const [lo, hi] = ceilRange(p, k, ceil), known = lo === hi;
           return `<div class="rk rk2">
           <span>${k} <span class="muted small">${ATTR_NAMES[k]}</span></span>
           <span>${now}</span>
-          <span class="${known ? 'gold' : 'muted'}">${known ? ceil : '?'}</span>
-          <div class="${barClass(k)}">${known ? `<div class="room" style="width:${ceil / ATTR_MAX * 100}%"></div>` : ''}<div class="fill" style="width:${now / ATTR_MAX * 100}%"></div>${known ? `<div class="ceil" style="left:calc(${ceil / ATTR_MAX * 100}% - 2px)"></div>` : ''}</div>
+          <span class="${known ? 'gold' : 'muted'}">${known ? ceil : `${lo}–${hi}`}</span>
+          <div class="${barClass(k)}"><div class="room ${known ? '' : 'fuzzy'}" style="width:${(known ? ceil : hi) / ATTR_MAX * 100}%"></div>${known ? '' : `<div class="band" style="left:${lo / ATTR_MAX * 100}%;width:${(hi - lo) / ATTR_MAX * 100}%"></div>`}<div class="fill" style="width:${now / ATTR_MAX * 100}%"></div>${known ? `<div class="ceil" style="left:calc(${ceil / ATTR_MAX * 100}% - 2px)"></div>` : ''}</div>
         </div>`;
         }).join('')}
-        <p class="note muted small" style="margin-top:8px">The filled bar is today's rating; the outlined part runs to the projected ceiling (the notch). <b>?</b> = not scouted yet: some ceilings come out during scouting and the combine, and a private workout shows them all.</p>
+        <p class="note muted small" style="margin-top:8px">The filled bar is today's rating. A gold number and the notch are his ceiling; a range (the shaded band) is as close as you can read it so far. Ranges tighten after Mock 1.0, with a scouting trip and at the combine (the athletic ones most), and a private workout shows every ceiling. A rating already at 20, and the physical ratings (no ceiling to grow into), are always exact.</p>
       </fieldset>`]])}`,
   });
 };
@@ -16966,7 +17072,7 @@ screens.review = () => {
         <div class="stack">${r.standings.map((x, i) => `<div class="stand-row ${x.t === t ? 'mine' : ''}"><span class="small muted">${i + 1}</span>${logoImg(x.t)}<span class="grow small"><b>${esc(x.t.shortName)}</b></span><span class="small">${x.W}-${x.L}</span><span class="small muted">${x.cW}-${x.cL} conf</span></div>`).join('')}</div>
       </fieldset>`],
       ])}`,
-    action: isStep('review') ? { act: 'reviewDone', label: 'Wrap Up the Season' } : null,
+    action: isStep('review') ? { act: 'reviewDone', label: 'Wrap Up' } : null,
   });
 };
 // The conference table for a season, your team boxed.
@@ -17036,7 +17142,7 @@ screens.departures = () => {
       <fieldset class="frame"><legend>Pro Pipeline</legend><div class="stack">${bySchool.slice(0, 8).map(([sc, n], i) => `<div class="stand-row ${sc === t ? 'mine' : ''}"><span class="small muted">${i + 1}</span>${logoImg(sc)}<span class="grow small"><b>${esc(sc.shortName)}</b></span><span class="small">${n} player${n > 1 ? 's' : ''}</span></div>`).join('')}</div></fieldset>
       <fieldset class="frame"><legend>The Draft Class</legend><div class="stack">${drafted.map(row).join('')}${undrafted.map(row).join('')}</div>
         <p class="note muted small" style="margin-top:6px">Last line: his final college season (points/rebounds/assists).</p></fieldset>`,
-    action: isStep('departures') ? { act: 'departuresDone', label: 'Wrap Up Departures' } : null,
+    action: isStep('departures') ? { act: 'departuresDone', label: 'Wrap Up' } : null,
   });
 };
 actions.departuresDone = () => { calFlags().departures = true; goHome(); nextUp(); };
@@ -17063,7 +17169,7 @@ screens.seniors = () => {
       </fieldset>
       ${r.records.length ? `<fieldset class="frame"><legend>Records Your Players Hold</legend><div class="stack">${r.records.map(x => `<p class="note small">🏅 <b>${esc(playerName(x.p))}</b>: ${x.value} ${esc(x.stat)} in a game (${x.yr}), No. ${x.rank} all-time</p>`).join('')}</div></fieldset>` : ''}
       <fieldset class="frame"><legend>Class of ${r.yr}</legend><p class="note small muted">The league's notable graduates, by career points.</p><div class="stack">${r.grads.slice(0, 15).map(gRow).join('') || '<p class="note small muted">None on record.</p>'}</div></fieldset>`,
-    action: isStep('seniors') ? { act: 'seniorsDone', label: 'Wrap Up the Send-off' } : null,
+    action: isStep('seniors') ? { act: 'seniorsDone', label: 'Wrap Up' } : null,
   });
 };
 actions.seniorsDone = () => { calFlags().seniors = true; goHome(); nextUp(); };
@@ -17162,7 +17268,7 @@ screens.showcase = () => {
       : `<p class="note small">The top 20 in the class of ${cls.hs.length}: the 10 from furthest east against the 10 from furthest west.</p>`}
       ${side('East', ids[0], 0)}${side('West', ids[1], 1)}
       <p class="note muted small">Every player here carries an All-American tag into recruiting.</p>`,
-    action: !sc ? { act: 'playShowcase', label: 'Play the Showcase' } : isStep('showcase') ? { act: 'showcaseDone', label: 'Wrap Up the Showcase' } : null,
+    action: !sc ? { act: 'playShowcase', label: 'Play the Showcase' } : isStep('showcase') ? { act: 'showcaseDone', label: 'Wrap Up' } : null,
   });
 };
 actions.playShowcase = () => {
@@ -17435,7 +17541,7 @@ screens.signing = () => {
       </fieldset>` : ''}
       <fieldset class="frame"><legend>Class Rankings</legend><div class="stack">${r.list.map(c => `<div class="stand-row ${c.team === t ? 'mine' : ''}"><span class="small muted">${c.rank}</span>${c.team ? logoImg(c.team) : ''}<span class="grow small"><b>${esc(c.team?.shortName || '?')}</b> <span class="muted">${c.players.length} · ${(c.stars / 2).toFixed(1)}★</span></span><b class="${gradeCls(c.grade)}">${c.grade}</b></div>`).join('') || '<p class="note small muted">No classes yet. Load a save from after recruiting.</p>'}</div>
         <p class="note muted small" style="margin-top:6px">Graded on potential, All-American signees and how much transfers help now, against this year's classes.</p></fieldset>`,
-    action: isStep('signing') ? { act: 'signingDone', label: 'Wrap Up Signing' } : null,
+    action: isStep('signing') ? { act: 'signingDone', label: 'Wrap Up' } : null,
   });
 };
 actions.signingDone = () => { calFlags().signing = true; goHome(); nextUp(); };
@@ -17504,7 +17610,7 @@ screens.practice = () => {
         <p class="note muted small" style="margin-top:6px">Juniors and seniors with the best locker-room trait.</p></fieldset>
       ${r.pushing.length ? `<fieldset class="frame"><legend>Freshmen Pushing for Minutes</legend><div class="stack">${r.pushing.map(x => pRow(x)).join('')}</div></fieldset>` : ''}
       <p class="note muted small">Set your lineup in the game; this is how camp shakes out by the ratings.</p>`,
-    action: isStep('practice') ? { act: 'practiceDone', label: 'Wrap Up Practice' } : null,
+    action: isStep('practice') ? { act: 'practiceDone', label: 'Wrap Up' } : null,
   });
 };
 actions.practiceDone = () => { calFlags().practice = true; goHome(); nextUp(); };
@@ -17540,7 +17646,7 @@ screens.portal = (args = {}) => {
       <div class="tabs fa-tabs">${views.map(([k, l]) => `<button class="btn ${k === view ? 'on focus' : 'off'}" data-act="portalView" data-v="${k}">${l}</button>`).join('')}</div>
       <div class="stack">${list.map(row).join('') || '<p class="note small muted">Nobody here.</p>'}</div>
       <p class="note muted small" style="margin-top:6px">📍 = your campus is one of the 8 closest schools to his hometown (recruits lean toward staying close). Recruit them during the signing period.</p>`,
-    action: isStep('portal') ? { act: 'portalDone', label: 'Wrap Up the Portal' } : null,
+    action: isStep('portal') ? { act: 'portalDone', label: 'Wrap Up' } : null,
   });
 };
 actions.portalView = d => replace('portal', { view: d.v });
@@ -17627,7 +17733,7 @@ function campusNeeded() {
 }
 // The NBA steps the app runs for a campus league: the simple offseason, each with its Sim.
 const CAMPUS_PRO_KEYS = ['lottery', 'draft', 'options', 'camp', 'fa1', 'fa2', 'fa3', 'cuts'];
-const campusProCal = () => [...CALENDAR.filter(st => CAMPUS_PRO_KEYS.includes(st.key)),
+const campusProCal = () => [...CALENDAR.filter(st => CAMPUS_PRO_KEYS.includes(st.key) && !PAUSED.has(st.key)),
   { key: 'campusBack', date: 'Oct 20', title: 'Back to Campus', blurb: 'The NBA is set for its new season. Back to your school\'s offseason (export when you\'re done with it, at Tip-Off).', done: () => !state.campusPro }];
 async function campusLoadPre(file) {
   let pre;
@@ -18160,7 +18266,7 @@ function applyRealPicksNow() {
 // picks for (from this summer's draft on). A pick traded away comes home with its number (a numbered draft order stays
 // as the lottery set it); one that was removed (forfeited) is put back; open protections and swaps are dropped.
 function resetPicksNow() {
-  const L = league(), dy = draftYear(L) + (L.season.phase >= PHASE_POST_DRAFT && L.season.phase !== 9 && L.season.phase !== 11 ? 1 : 0);
+  const L = league(), dy = draftYear(L) + draftBehind(L);
   const years = [...new Set(L.teams.flatMap(t => (t.draftPicks || []).map(p => p.yr)))].filter(y => y >= dy).sort();
   const byId = new Map(L.teams.map(t => [t.id, t]));
   let moved = 0, added = 0;
@@ -18282,17 +18388,19 @@ actions.waiverSign = d => {
 // last roster spot) play out over three preseason games. Winners get a lift; the bubble loser comes up as the cut.
 function campBattles(t) {
   const O = FA.FA_DEFAULTS, out = [];
-  // The starting fight: a bench player within 4 levels of a starter at a spot he can play (the closest such pair),
-  // from the save's lineup; without one, the 5th and 6th best players.
+  // The starting fight: a bench player at the starter's own position (or the one next to it) who can play the spot,
+  // within 4 levels of him (the closest such pair, from the save's lineup). No close fight: a bench standout instead,
+  // one of the best few off the bench, who plays himself into a bigger role in the preseason.
   const signed = FA.signedRoster(t), sl = t.startingLineup || [], byId = id => signed.find(p => p.id === id);
   const starters = sl.filter(e => e.linePos < 5 && byId(e.pid)), bench = signed.filter(p => !starters.some(e => e.pid === p.id));
-  if (starters.length === 5) {
-    const pairs = starters.flatMap(e => bench.filter(b => LU.inPos(b, e.linePos)).map(b => ({ s: byId(e.pid), b, gap: shownLevel(byId(e.pid)) - shownLevel(b) })))
-      .filter(x => Math.abs(x.gap) <= 4).sort((x, y) => Math.abs(x.gap) - Math.abs(y.gap));
-    if (pairs[0]) out.push({ kind: 'start', a: pairs[0].s.id, b: pairs[0].b.id });
-  } else {
-    const top = [...signed].sort((a, b) => shownLevel(b) - shownLevel(a));
-    if (top.length >= 6 && shownLevel(top[4]) - shownLevel(top[5]) <= 4) out.push({ kind: 'start', a: top[4].id, b: top[5].id });
+  const samePos = (a, b) => Math.abs((a.pos ?? 4) - (b.pos ?? 4)) <= 1;
+  const pairs = starters.length === 5 ? starters.flatMap(e => bench.filter(b => LU.inPos(b, e.linePos) && samePos(b, byId(e.pid))).map(b => ({ s: byId(e.pid), b, gap: shownLevel(byId(e.pid)) - shownLevel(b) })))
+    .filter(x => Math.abs(x.gap) <= 4).sort((x, y) => Math.abs(x.gap) - Math.abs(y.gap)) : [];
+  if (pairs[0]) out.push({ kind: 'start', a: pairs[0].s.id, b: pairs[0].b.id });
+  else {
+    const pool = (starters.length === 5 ? bench : [...signed].sort((a, b) => shownLevel(b) - shownLevel(a)).slice(5))
+      .sort((a, b) => shownLevel(b) - shownLevel(a)).slice(0, 4).map(p => p.id);
+    if (pool.length) out.push({ kind: 'standout', pool });
   }
   const ranked = cutRank(t), need = Math.max(0, FA.signedRoster(t).length - O.seasonMax);
   if (need && ranked[need]) { const a = ranked[need].p, b = ranked[need - 1].p; if (!out.some(x => [x.a, x.b].includes(a.id) || [x.a, x.b].includes(b.id))) out.push({ kind: 'spot', a: a.id, b: b.id }); }
@@ -18313,6 +18421,16 @@ function campStart(t, w, l) {
   for (const k of ['linePos', 'minutes', 'teamPos', 'posRnk']) [w[k], out[k]] = [out[k], w[k]];
   return out.id;
 }
+// A bench standout moves up to sixth man (the first entry off the bench) when he isn't already starting or there.
+function campSixth(t, w) {
+  const sl = t.startingLineup || [], ew = sl.find(e => e.pid === w.id), e6 = sl.find(e => e.linePos === 5);
+  if (!ew || ew.linePos <= 5 || !e6) return null;
+  const other = t.roster.find(p => p.id === e6.pid);
+  if (!other) return null;
+  [ew.pid, e6.pid] = [e6.pid, ew.pid];
+  for (const k of ['linePos', 'minutes', 'teamPos', 'posRnk']) [w[k], other[k]] = [other[k], w[k]];
+  return other.id;
+}
 const campStore = () => (typeof calFlags().preseason === 'object' ? calFlags().preseason : (calFlags().preseason = {}));
 function campPlay(t) {
   const L = league(), st = campStore();
@@ -18326,6 +18444,17 @@ function campPlay(t) {
     return { opp: o.shortName, us: win ? lose + margin : lose, them: win ? lose : lose + margin };
   });
   const battles = campBattles(t).map(x => {
+    if (x.kind === 'standout') {
+      // The best few off the bench, the young ones a little likelier: whoever catches fire in the preseason.
+      const pool = x.pool.map(playerById).filter(Boolean);
+      const wts = pool.map((p, i) => (4 - i) + (p.age <= 24 ? 1.5 : 0)), tot = wts.reduce((a, b) => a + b, 0);
+      let r = rnd() * tot, w = pool[0];
+      for (let i = 0; i < pool.length; i++) { r -= wts[i]; if (r <= 0) { w = pool[i]; break; } }
+      if (!w) return null;
+      moraleEvent(w, `camp:${L.season.currentYear}`, 3, 'played himself into a bigger role in the preseason');
+      const ppg = +(Math.max(6, (shownLevel(w) - 52) / 2 + rnd() * 6 + 3)).toFixed(1);
+      return { kind: 'standout', win: w.id, wl: { ppg }, lineup: campSixth(t, w) };
+    }
     const a = playerById(x.a), b = playerById(x.b);
     const edge = shownLevel(a) - shownLevel(b) + (a.age <= 24 ? 1.5 : 0) - (b.age <= 24 ? 1.5 : 0);
     const aWins = rnd() < 1 / (1 + Math.exp(-edge / 3));
@@ -18335,7 +18464,7 @@ function campPlay(t) {
     if (x.kind === 'start' && !isHumble(l)) moraleEvent(l, `camp:${L.season.currentYear}`, -3, 'lost the camp battle for a starting job');
     if (x.kind === 'spot') { const sel = cutSel(); sel[l.id] = true; delete sel[w.id]; }
     return { ...x, win: w.id, lose: l.id, wl: line(w, true), ll: line(l, false), lineup: x.kind === 'start' ? campStart(t, w, l) : null };
-  });
+  }).filter(Boolean);
   st[t.id] = { games, battles };
   state.dirty = true;
 }
@@ -18343,14 +18472,14 @@ function campBox(t) {
   if (isCollege() || calFlags().cuts) return '';
   const st = campStore()[t.id], battles = st ? st.battles : campBattles(t);
   const nm = id => esc(playerName(playerById(id)) || '?');
-  const label = { start: 'Last starting spot', spot: 'Last roster spot' };
+  const label = { start: 'Starting spot', spot: 'Last roster spot', standout: 'Bench standout' };
   if (!st) return `<fieldset class="frame"><legend>Camp Battles${league().teams.filter(isUserTeam).length > 1 ? ` · ${esc(t.shortName)}` : ''}</legend><div class="stack">
-    ${battles.map(x => { const a = playerById(x.a), b = playerById(x.b); return `<p class="note small"><b>${label[x.kind]}</b>: ${nm(x.a)} ${lvTag(a)} vs ${nm(x.b)} ${lvTag(b)}</p>`; }).join('') || '<p class="note small muted">No close fights on this roster.</p>'}
+    ${battles.map(x => { if (x.kind === 'standout') return '<p class="note small"><b>Bench standout</b>: no close fight for a starting job, so the bench gets its shot. Someone can play his way into a bigger role.</p>'; const a = playerById(x.a), b = playerById(x.b); return `<p class="note small"><b>${label[x.kind]}</b>: ${nm(x.a)} ${lvTag(a)} vs ${nm(x.b)} ${lvTag(b)} <span class="muted">(${esc(posName(a))} vs ${esc(posName(b))})</span></p>`; }).join('') || '<p class="note small muted">No close fights on this roster.</p>'}
     <button class="btn focus" data-act="campPlay" data-t="${t.id}">🏀 Play the Preseason (3 games)</button></div></fieldset>`;
   const w = st.games.filter(g => g.us > g.them).length;
   return `<fieldset class="frame"><legend>Preseason · ${w}-${st.games.length - w}</legend><div class="stack">
     <p class="note small">${st.games.map(g => `<span class="${g.us > g.them ? 'up' : 'down'}">${g.us > g.them ? 'W' : 'L'} ${g.us}-${g.them}</span> vs ${esc(g.opp)}`).join(' · ')}</p>
-    ${st.battles.map(x => `<p class="note small"><b>${label[x.kind]}</b>: <span class="up">${nm(x.win)}</span> (${x.wl.ppg} ppg) beat out ${nm(x.lose)} (${x.ll.ppg} ppg)${x.kind === 'start' ? (typeof x.lineup === 'number' ? `. He takes ${nm(x.lineup)}'s spot in the starting five.` : x.lineup === true ? '. He keeps his starting job.' : '. Set him in your lineup in the game.') : ', now picked to cut.'}</p>`).join('')}
+    ${st.battles.map(x => x.kind === 'standout' ? `<p class="note small"><b>Bench standout</b>: <span class="up">${nm(x.win)}</span> (${x.wl.ppg} ppg) played himself into a bigger role${typeof x.lineup === 'number' ? `. He's first off the bench now, ahead of ${nm(x.lineup)}.` : '.'}</p>` : `<p class="note small"><b>${label[x.kind]}</b>: <span class="up">${nm(x.win)}</span> (${x.wl.ppg} ppg) beat out ${nm(x.lose)} (${x.ll.ppg} ppg)${x.kind === 'start' ? (typeof x.lineup === 'number' ? `. He takes ${nm(x.lineup)}'s spot in the starting five.` : x.lineup === true ? '. He keeps his starting job.' : '. Set him in your lineup in the game.') : ', now picked to cut.'}</p>`).join('')}
   </div></fieldset>`;
 }
 actions.campPlay = d => { const t = league().teams.find(x => x.id === +d.t); if (t) { campPlay(t); render(); } };
@@ -18434,7 +18563,7 @@ const myTeamsNow = () => league().teams.filter(isUserTeam);
 screens.ownerday = () => layout({
   title: 'Owner & Exit Meetings',
   body: myTeamsNow().map(t => ownerMeetingBox(t) + exitInterviewBox(t)).join('') || '<p class="note">Pick your team first.</p>',
-  action: isStep('owner') ? { act: 'stepWrap', k: 'owner', label: 'Wrap Up the Meetings' } : null,
+  action: isStep('owner') ? { act: 'stepWrap', k: 'owner', label: 'Wrap Up' } : null,
 });
 // Development plans: a focus for each of your players, steering his camp points (progression.js PLAN_ATTRS).
 const devPlanKey = () => `hlc:devplan:${saveTag()}`;
@@ -19261,7 +19390,7 @@ screens.editor = (args = {}) => {
   } else {
     const missing = edPlayers(L).filter(p => !p.traits || !Object.values(p.traits).some(v => v > 0)).length;
     body = `<fieldset class="frame"><legend>Traits</legend><p class="note small">${missing} players have no traits set. Open a player from a team's roster to edit his, or fill the empty ones with the app's judgments (real careers for known players, generated for the rest).</p>
-      <button class="btn" data-act="edFillTraits">Fill empty traits</button></fieldset>
+      <button class="btn" data-act="edFillTraits">Fill Empty Traits</button></fieldset>
       ${!isCollege() ? `<fieldset class="frame"><legend>Draft Class</legend><p class="note small">${league().draftClass?.length && phaseRank(league().season) < 3 ? 'Read the class the game made, or build your own: strength, stars, depth, flavor, sleepers, storylines, a headliner you design.' : 'Plan next year\'s class now: it goes in when that pre-draft file is loaded.'}</p><button class="btn" data-act="nav" data-to="classLab">🧪 Draft Class Lab</button></fieldset>` : ''}
       ${realignBox(L)}
       <fieldset class="frame"><legend>Export</legend><p class="note small">Writes the league file with your edits. Start a new save from it in the game.</p><button class="btn focus" data-act="${state.leagueFile ? 'download' : 'downloadLeague'}">💾 Download League File</button></fieldset>

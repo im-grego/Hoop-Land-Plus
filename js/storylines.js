@@ -101,7 +101,9 @@ function eliminatedBy(league, tid, yr) {
   for (const r of [...(po?.rounds || [])].reverse()) {
     for (const s of r.series || []) {
       if ((s.topSeed === tid || s.lowerSeed === tid) && s.winner !== tid && s.winner != null) {
-        return { by: s.winner, games: s.currentGame };
+        // Games from the wins, not the bracket's game counter: the winner's four plus the loser's, never past seven.
+        const need = s.firstTo || 4, lw = playoffRun(league.teams.find(t => t.id === tid) || {}, yr).wins;
+        return { by: s.winner, games: Math.min(need * 2 - 1, need + Math.max(0, Math.min(need - 1, lw || Math.max(0, (s.currentGame || need) - need)))) };
       }
     }
   }
@@ -152,9 +154,11 @@ export function buildStorylines(league, opts = {}) {
   const champs = roster.filter(({ p }) => won(p, AWARD.CHAMP, yr));
   const fmvp = roster.find(({ p }) => won(p, AWARD.FMVP, yr))?.p;
   let champTid = null;
-  if (champs.length) {
+  // The team's own record of the year says who won; the players' rings are the fallback.
+  const titleTeam = league.teams.find(t => wonTitle(t, yr));
+  if (titleTeam || champs.length) {
     const tids = champs.map(({ p }) => lines.get(p.id)?.tid).filter(x => x != null);
-    champTid = (fmvp && lines.get(fmvp.id)?.tid) ??
+    champTid = titleTeam ? titleTeam.id : (fmvp && lines.get(fmvp.id)?.tid) ??
       tids.sort((a, b) => tids.filter(x => x === b).length - tids.filter(x => x === a).length)[0];
     const t = teams.get(champTid);
     if (t) {
@@ -173,7 +177,7 @@ export function buildStorylines(league, opts = {}) {
       ], t.id + yr);
       add('champion', 120, '🏆', title,
         `${streak >= 2 ? `${Word(streak)} titles in a row` : `Fresh off the ${yr} title`}${opp ? ` over the ${opp.name}` : ''}` +
-        `${fmvp ? `, with ${playerName(fmvp)} as Finals MVP` : ''}. ` +
+        `${fmvp && lines.get(fmvp.id)?.tid === champTid ? `, with ${playerName(fmvp)} as Finals MVP` : ''}. ` +
         (left.length ? `Not everyone is back: ${left.slice(0, 2).join(' and ')} moved on. ` : 'The whole core is back. ') +
         `Everyone in ${next} is chasing ${place(t)}.`, fmvp?.id);
     }
@@ -198,13 +202,14 @@ export function buildStorylines(league, opts = {}) {
   for (const t of league.teams) {
     if (t.id === champTid) continue;
     const run = playoffRun(t, yr);
-    if (run.round < 2) continue;
+    // The champion never "came up short", even when the award history pointed the champion story at another team.
+    if (run.round < 2 || wonTitle(t, yr)) continue;
     const ko = eliminatedBy(league, t.id, yr);
     const by = ko && teams.get(ko.by);
     let deep = 0;
     for (let y = yr; y > yr - 4 && playoffRun(t, y).round >= 2 && !wonTitle(t, y); y--) deep++;
     const [s1, s2] = best(t, 2);
-    const games = ko ? ko.games : 4 + run.wins;
+    const games = ko ? ko.games : 4 + Math.min(3, run.wins);
     const close = run.wins === 3 ? ` in ${games}, one win short` : ` in ${games}`;
     const who = s1 ? `${playerName(s1)}${s2 ? ` and ${playerName(s2)}` : ''}` : '';
     const are = s2 ? 'are' : 'is';

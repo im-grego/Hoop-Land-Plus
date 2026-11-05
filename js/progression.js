@@ -368,9 +368,11 @@ export function seasonGameScore(p, leagueIdx, year, params) {
 // College production: per-36 game score of a player's last college season with real minutes (8+ games, 8+ a game),
 // or null. Compared within his draft class at his position group (collegeProduction), it's how a prospect is judged,
 // the way pros are judged against their peers.
+let madeGsOf = null;
+export const setMadeGameScores = f => { madeGsOf = f; };   // a made-up season's game score (madeprod.js)
 export function collegeGameScore(p) {
   const st = (p.stats || []).filter(s => s.league > 0 && (s.season || []).some(r => r.GP > 0)).sort((a, b) => b.yr - a.yr)[0];
-  if (!st) return null;
+  if (!st) return madeGsOf ? madeGsOf(p) : null;
   const t = st.season.reduce((a, r) => {
     for (const k of ['GP', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TO', 'FGM', 'FGA', 'FTM', 'FTA']) a[k] = (a[k] || 0) + (r[k] || 0);
     a.MIN = (a.MIN || 0) + secsOf(r, st.league) / 60;

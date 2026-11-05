@@ -38,6 +38,20 @@ export const DRILLS = [
   { k: 'sideMid', short: 'Mid Side', name: 'Midrange Side', n: 25, group: 'shoot' },
   { k: 'ft', short: 'Free Throws', name: 'Free Throws', n: 10, group: 'shoot' },
 ];
+// All-time combine norms (mean, spread) for percentiles: a result is graded against every prospect who has ever
+// tested, not just this class, so a class's best are in the 90s and only a true outlier hits the 99th.
+export const NORMS = {
+  lane: [11.3, 0.5], shuttle: [3.04, 0.15], sprint: [3.33, 0.17], standVert: [29.4, 3.1], maxVert: [37.2, 3.2], bench: [7.5, 5],
+  dribble: [18, 4], spot: [16.4, 3.6], star3: [13.9, 3.7], side3: [15, 3.6], starMid: [15.6, 3], sideMid: [16.6, 3.1], ft: [7.4, 1.1],
+  threes: [45.3, 9.5], mid: [32.2, 5.1], total: [102.9, 16.8],
+};
+// Normal CDF (Abramowitz-Stegun), 0-1.
+const cdf = z => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+// All-time percentile, 1-99.
+export const combinePct = (k, v, low = false) => { const n = NORMS[k]; if (!n || v == null) return null; const z = (v - n[0]) / n[1] * (low ? -1 : 1); return Math.max(1, Math.min(99, Math.round(cdf(z) * 100))); };
+// How a percentile reads: the word the scouts would use.
+export const pctTier = v => v >= 95 ? ['Elite', 'gold'] : v >= 80 ? ['Strong', 'up'] : v >= 35 ? ['', 'muted'] : v >= 15 ? ['Below avg', 'muted'] : ['Poor', 'down'];
+
 export const MEASURES = [
   { k: 'htNs', name: 'Height w/o shoes', fmt: v => inchStr(v) },
   { k: 'htShoes', name: 'Height w/ shoes', fmt: v => inchStr(v) },

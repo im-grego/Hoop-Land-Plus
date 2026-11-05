@@ -1721,3 +1721,8 @@ fieldset.frame { position: relative; }
 
 /* The player's number in his profile header: tap to change it. */
 .num-chip { font-weight: 800; text-decoration: underline dotted; }
+/* The ? by a screen's title (helptext.js). */
+.header .info-i.hdr-help { position: static; flex: 0 0 auto; width: 30px; height: 30px; margin-left: 6px; align-self: center; box-shadow: 0 3px 0 var(--btn-shadow); }
+/* A prospect's ceiling read as a range: a dim outline to the top of it, a brighter band across the range. */
+.bar .room.fuzzy { outline-style: dashed; background: color-mix(in srgb, var(--bc) 14%, transparent); }
+.bar .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--bc) 45%, transparent); }
