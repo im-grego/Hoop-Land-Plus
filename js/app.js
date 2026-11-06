@@ -69,7 +69,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.301.2';
+const APP_VERSION = '0.302.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -5309,6 +5309,7 @@ screens.staff = () => layout({ title: 'Staff & Scheme', body: coachCard(), actio
 // The team meeting, simulated for the whole league with one formula: every head coach talks to his group and
 // each player's tendencies and makeup shift. Yours runs on your coaching tree; the rest on their coach's own ratings.
 function simMeetings() {
+  if (calFlags().meeting) return;   // one meeting a summer: the Team Meeting screen may have held it already
   const L = league(), ts = tendStore(), sch = tierNow('scheme'), fx = fxNow();
   const rng = mulberry32((saveSalt() ^ 0x3ee7) >>> 0);
   const rows = [], mine = [], all = [];
@@ -5344,15 +5345,16 @@ function simMeetings() {
 }
 function influenceBox(auto) {
   const L = league();
-  if (!calFlags().meetingAll) {
+  // One meeting a summer, held on the Team Meeting screen (talks first, then the meeting). Not held yet: a way there.
+  if (!calFlags().meeting) {
     return `<fieldset class="frame"><legend>Influence</legend><div class="stack">
-      <p class="note small">Your head coach meets with the team. Each player's tendencies and traits shift a little toward his system and his new ratings. Every team holds one.</p>
-      <button class="btn ${auto ? 'focus' : 'off'}" data-act="runMeetings" ${auto ? '' : 'disabled'}>🗣️ Run Team Meeting</button></div></fieldset>`;
+      <p class="note small">Your head coach meets with the team once a summer. Each player's tendencies and traits shift a little toward his system and his new ratings. Every team holds one.</p>
+      <button class="btn ${auto ? 'focus' : 'off'}" data-act="nav" data-to="meeting" ${auto ? '' : 'disabled'}>🗣️ Team Meeting</button></div></fieldset>`;
   }
   // The results are the summary: who on your team moved, and how.
   return meetingResultsBox();
 }
-actions.runMeetings = () => { if (calFlags().meetingAll) return; simMeetings(); toast('The meeting breaks up', `${calFlags().meetingList.length} of your players shifted`); render(); };
+actions.runMeetings = () => { if (calFlags().meeting) return; simMeetings(); toast('The meeting breaks up', `${calFlags().meetingList.length} of your players shifted`); render(); };
 // Your draft picks sign first: first-rounders take their scale deal,
 // second-rounders get 2 or 4 years at the minimum (team option either way).
 function rookieDealsCard() {
@@ -6656,6 +6658,7 @@ actions.expPick = d => {
   if (!pick) return;
   if (state.revealing) return;
   const before = (x.picks || []).length;
+  state.expShown = before;   // the strip keeps the new picks hidden until the reveal names them
   expTake(x, t, pick.p, pick.t);
   // Your pick is in, then the other team answers (back and forth, as in the room).
   const u = expTurn(x);
@@ -6675,13 +6678,16 @@ actions.expSim = d => {
     if (!expStep(x)) break;
     if (d.one === '1') break;
   }
+  // A single pick plays out like the NBA draft's (the strip holds it back until it's named); a sim skips ahead.
+  const show = d.one === '1' || d.reply;
+  state.expShown = show ? before : null;
   saveExp(x); render();
-  // A single pick plays out like the NBA draft's; a sim skips ahead.
-  if (d.one === '1' || d.reply) expReveal(x, before);
+  if (show) expReveal(x, before);
 };
 function expReveal(x, from) {
   const L = league();
-  roomReveal((x.picks || []).slice(from).map(y => ({ n: y.n, team: L.teams.find(t => t.id === y.by), sub: 'Expansion Draft', p: expPickedPlayer(y), from: L.teams.find(t => t.id === y.from)?.shortName })));
+  if (!(x.picks || []).slice(from).length) { state.expShown = null; return; }
+  roomReveal((x.picks || []).slice(from).map(y => ({ n: y.n, team: L.teams.find(t => t.id === y.by), sub: 'Expansion Draft', p: expPickedPlayer(y), from: L.teams.find(t => t.id === y.from)?.shortName })), k => expDeck(x, from + k));
 }
 // Done: the new teams take their NBA draft slots, set a rotation, and the smaller cap starts.
 actions.expFinish = () => {
@@ -6743,18 +6749,21 @@ function roomClock(n, team, sub, user) {
 }
 // The picks around the clock: [{ n, team, p (made) }].
 function roomDeck(items) {
-  return items.length ? `<div class="on-deck">${items.map(({ n, team, p }) => { const tint = p ? teamTint(team) : ''; return `<div class="od-item ${isUserTeam(team) ? 'mine' : ''} ${p ? 'past' : ''} ${tint ? 'tc' : ''}" ${tint ? `style="${tint}"` : ''}><span class="od-no">#${n}</span>${logoImg(team)}<span class="small">${p ? `<span class="od-pl">${esc(p.ln || playerName(p))}</span><span class="od-tm">${esc(team.shortName)}</span>` : esc(team.shortName)}</span></div>`; }).join('')}</div>` : '';
+  return items.length ? `<div class="on-deck">${items.map(({ n, team, p, now }) => { const tint = p ? teamTint(team) : ''; return `<div class="od-item ${isUserTeam(team) ? 'mine' : ''} ${p ? 'past' : ''} ${now ? 'now' : ''} ${tint ? 'tc' : ''}" ${tint ? `style="${tint}"` : ''}><span class="od-no">#${n}</span>${logoImg(team)}<span class="small">${p ? `<span class="od-pl">${esc(p.ln || playerName(p))}</span><span class="od-tm">${esc(team.shortName)}</span>` : esc(team.shortName)}</span></div>`; }).join('')}</div>` : '';
 }
 // Play picks out in the clock card: [{ n, team, sub, p, from }]. Tapping a sim button mid-reveal skips it.
-async function roomReveal(items) {
+async function roomReveal(items, deckAt = null) {
   const card = $app.querySelector('.clock-card');
   if (!card || !items.length) return;
+  // The strip under the clock follows the reveal: pick i is on the clock (no name yet) until the card names him.
+  const setDeck = k => { const d = deckAt && $app.querySelector('.on-deck'); if (d) d.outerHTML = deckAt(k); };
   state.skipReveal = false;
   const wait = ms => state.skipReveal ? Promise.resolve() : new Promise(r => { const t0 = Date.now(); const tick = () => (state.skipReveal || Date.now() - t0 >= ms ? r() : setTimeout(tick, 50)); tick(); });
   state.revealing = true;
   try {
-    for (const it of items) {
+    for (const [i, it] of items.entries()) {
       if (!card.isConnected || !it.p) continue;
+      setDeck(i);
       card.setAttribute('style', teamTint(it.team));
       card.classList.remove('mine', 'named');
       card.classList.add('reveal');
@@ -6763,9 +6772,10 @@ async function roomReveal(items) {
       if (!card.isConnected) break;
       card.classList.add('named');
       card.querySelector('.pick-in').outerHTML = `<span class="pick-name">${esc(playerName(it.p))}</span><span class="small">${esc(posName(it.p))} · ${it.p.age}y · Lv ${shownLevel(it.p)}${it.from ? ` · from ${esc(it.from)}` : ''}</span>`;
+      setDeck(i + 1);
       await wait(1500);
     }
-  } finally { state.revealing = false; }
+  } finally { state.revealing = false; state.expShown = null; }
   if (card.isConnected) render();
 }
 function expDraftBody(x) {
@@ -6780,7 +6790,8 @@ function expDraftBody(x) {
   const mineNow = t && isUserTeam(t);
   const board = `<div class="pick-set cols4">${[['all', 'All'], ['guards', 'Guards'], ['wings', 'Wings'], ['bigs', 'Bigs']].map(([g, l]) => `<button class="btn small ${grp === g ? 'on focus' : 'off'}" data-act="expGrp" data-g="${g}">${l}</button>`).join('')}</div>
     <div class="stack">${shown.map(y => expRow(y.p, mineNow ? `${owed.has(y.p.id) ? '<span class="small gold">🤝 Deal</span> ' : ''}<button class="btn tiny focus" data-act="expPick" data-id="${y.p.id}">Take</button>` : `<span class="small muted">${esc(y.t.shortName)}</span>`).replace('</span></span>', ` · from ${esc(y.t.shortName)}</span></span>`)).join('') || '<p class="note small muted">The board is empty.</p>'}</div>`;
-  const log = `<div class="stack">${[...(x.picks || [])].reverse().map(y => { const e = L.teams.find(z => z.id === y.by), f = L.teams.find(z => z.id === y.from); return `<div class="drill-row tap" data-act="openPlayer" data-id="${y.pid}"><span class="pk">${y.n}</span><span class="grow"><b>${esc(e.shortName)}</b>: ${esc(y.name)} <span class="small muted">from ${esc(f?.shortName || '?')} · ${esc(EXP_KIND[y.kind] || '')}${y.sal ? ` · $${y.sal}M × ${y.yrs}` : ''}</span></span></div>`; }).join('') || '<p class="note small muted">No picks yet.</p>'}</div>`;
+  const seen = (x.picks || []).slice(0, state.expShown ?? undefined);   // picks still being revealed stay out
+  const log = `<div class="stack">${[...seen].reverse().map(y => { const e = L.teams.find(z => z.id === y.by), f = L.teams.find(z => z.id === y.from); return `<div class="drill-row tap" data-act="openPlayer" data-id="${y.pid}"><span class="pk">${y.n}</span><span class="grow"><b>${esc(e.shortName)}</b>: ${esc(y.name)} <span class="small muted">from ${esc(f?.shortName || '?')} · ${esc(EXP_KIND[y.kind] || '')}${y.sal ? ` · $${y.sal}M × ${y.yrs}` : ''}</span></span></div>`; }).join('') || '<p class="note small muted">No picks yet.</p>'}</div>`;
   const ctl = !t ? `<div class="btn-set"><button class="btn focus wide" data-act="expFinish">🏁 Close the Draft</button></div>`
     : mineNow ? `<p class="note"><b class="gold">You're on the clock</b> for ${esc(t.shortName)} (pick ${n(t) + 1}).</p><div class="btn-set"><button class="btn" data-act="expStop" ${n(t) >= EXP.EXP_MIN ? '' : 'disabled'}>✋ Done Drafting</button><button class="btn" data-act="expSim" data-all="1">🤖 Auto-Draft Rest</button></div>`
     : `<div class="btn-set"><button class="btn focus" data-act="expSim" data-one="1">▶ Next Pick</button><button class="btn" data-act="expSim">⏩ ${expTeamsOf(x).some(isUserTeam) ? 'To My Pick' : 'Sim the Draft'}</button></div>`;
@@ -6797,11 +6808,19 @@ function expDraftBody(x) {
   if (t && !x.introSeen && !(x.picks || []).length) return roomIntro(`${x.yr} Expansion Draft`, t, mineNow, 'expIntro', myTeams.length ? `<div style="text-align:left;margin:10px 0">${mineTab}</div>` : '');
   // The clock: whoever's up, and the picks either side (they alternate, so it's back and forth).
   const made = x.picks || [], nextN = made.length + 1;
-  const ahead = [];
-  if (t) { const o = x.order.filter(id => !x.stopped?.[id]); let k = o.indexOf(t.id); for (let j = 1; j <= 3 && o.length; j++) ahead.push({ n: nextN + j, team: L.teams.find(y => y.id === o[(k + j) % o.length]) }); }
-  const last = made.slice(-1).map(y => ({ n: y.n, team: L.teams.find(z => z.id === y.by), p: expPickedPlayer(y) }));
-  const clock = t ? roomClock(nextN, t, `${n(t)} picked · $${Math.max(0, Math.round(expRoom(x, t)))}M room`, mineNow) + roomDeck([...last, ...ahead]) : '';
-  return `${head}${clock}${ctl}${uiTabs('expDraft', [['board', 'Board', board], ['log', `Picks (${(x.picks || []).length})`, log], ...(myTeams.length ? [['mine', 'My Team', mineTab]] : [])])}`;
+  const clock = t ? roomClock(nextN, t, `${n(t)} picked · $${Math.max(0, Math.round(expRoom(x, t)))}M room`, mineNow) + expDeck(x, state.expShown ?? made.length) : '';
+  return `${head}${clock}${ctl}${uiTabs('expDraft', [['board', 'Board', board], ['log', `Picks (${seen.length})`, log], ...(myTeams.length ? [['mine', 'My Team', mineTab]] : [])])}`;
+}
+// The strip under the clock with `shown` picks out: the last one shown (with his name), the pick on the clock, and the
+// two after it. Picks already made but not yet revealed show as their team only.
+function expDeck(x, shown) {
+  const L = league(), made = x.picks || [], team = id => L.teams.find(y => y.id === id);
+  const items = made.slice(0, shown).slice(-1).map(y => ({ n: y.n, team: team(y.by), p: expPickedPlayer(y) }));
+  const up = made.slice(shown).map(y => ({ n: y.n, team: team(y.by) }));
+  const t = expTurn(x);
+  if (t) { const o = x.order.filter(id => !x.stopped?.[id]), k = o.indexOf(t.id); for (let j = 0; up.length < 3 && o.length && j < 6; j++) up.push({ n: made.length + 1 + j, team: team(o[(k + j) % o.length]) }); }
+  if (up[0]) up[0].now = true;
+  return roomDeck([...items, ...up.slice(0, 3)]);
 }
 const expPickedPlayer = y => league().teams.flatMap(t => t.roster).find(p => p.id === y.pid) || { fn: y.name, ln: '', pos: 0, age: '' };
 actions.expIntro = () => { const x = expStore(); x.introSeen = true; saveExp(x); render(); };
@@ -14258,6 +14277,17 @@ function proactiveFrontOffice() {
       }
     }
   }
+  // A team selling off its veterans shops its best one too: the blockbuster of the summer (three teams at most).
+  let sold = 0;
+  for (const t of L.teams.filter(x => !isUserTeam(x) && ['selling', 'rebuilding'].includes(teamStatus(L, x)))) {
+    if (sold >= 3) break;
+    const star = FA.signedRoster(t).filter(p => p.age >= 27 && shownLevel(p) >= 80 && (p.contract?.yrs ?? 0) >= 2 && !tradeLock(p) && !FA.isLifer(L, p, t))
+      .sort((a, b) => shownLevel(b) - shownLevel(a))[0];
+    if (!star || !star.season) continue;
+    star.season.onTradeBlock = 1;
+    why[star.id] ||= teamStatus(L, t) === 'rebuilding' ? 'the rebuild is on' : 'cashing in while his value is high';
+    sold++;
+  }
   offSet('fo', { done: true, why });
   if (Object.keys(why).length) state.dirty = true;
   return why;
@@ -14612,34 +14642,58 @@ function cpuBlockDeals(day) {
   cpuCoachMoves();
   applyCoachFriction();
   syncScoringOptions();
-  for (const t of cpu) {
-    // Only players actually on the block (1), never untouchables (2), and only a few deals a day.
-    for (const p of FA.signedRoster(t).filter(x => x.season?.onTradeBlock === 1 && !tradeLock(x) && x.contract?.yrs > 0 && !FA.isLifer(L, x, t))) {
-      if (done.length >= 5) break;
-      if (rng() > 0.4) continue;                                   // not every shopped player draws a call every day
+  // Everyone on a block (1), never untouchables (2): stars first, with two blockbusters a day on top of five other deals.
+  const shop = cpu.flatMap(t => FA.signedRoster(t).filter(x => x.season?.onTradeBlock === 1 && !tradeLock(x) && x.contract?.yrs > 0 && !FA.isLifer(L, x, t)).map(p => ({ t, p })))
+    .sort((a, b) => (shownLevel(b.p) >= 80) - (shownLevel(a.p) >= 80));
+  let starDeals = 0;
+  for (const { t, p } of shop) {
+    {
+      if (shownLevel(p) >= 80 ? starDeals >= 2 : done.length - starDeals >= 5) continue;
+      if (rng() > (shownLevel(p) >= 80 ? 0.75 : 0.4)) continue;    // not every shopped player draws a call every day (stars most days)
       const want = playerValue(p, state.leagueIdx, ly);
+      // A star (level 80+) is a blockbuster: contenders call, and the package runs two to four pieces (players and
+      // picks) with a first and a young player preferred. Anyone else goes for one or two pieces, as before.
+      const star = shownLevel(p) >= 80, sellerRebuild = ['rebuilding', 'selling'].includes(teamStatus(L, t));
       let best = null;
-      for (const u of [...cpu].filter(x => x !== t).sort(() => rng() - 0.5).slice(0, 12)) {
+      const buyers = [...cpu].filter(x => x !== t && (!star || ['contending', 'competing'].includes(teamStatus(L, x))));
+      for (const u of buyers.sort(() => rng() - 0.5).slice(0, 12)) {
         const stars = new Set([...u.roster].sort((a, b) => playerValue(b, state.leagueIdx, ly) - playerValue(a, state.leagueIdx, ly)).slice(0, 2));
         const assets = [
           ...FA.signedRoster(u).filter(x => !stars.has(x) && !tradeLock(x) && x.contract?.yrs > 0).map(x => ({ player: x, value: playerValue(x, state.leagueIdx, ly) })),
           ...u.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, u, pk)).map(pk => ({ pick: pk, value: futureValue(pk) })),
         ];
         const packs = [];
-        for (let i = 0; i < assets.length; i++) {
-          packs.push([assets[i]]);
-          for (let j = i + 1; j < assets.length && packs.length < 300; j++) packs.push([assets[i], assets[j]]);
+        if (star) {
+          // Two to four of his best pieces (the top 14 by value), each piece worth at least a tenth of the star.
+          const top = assets.filter(a => a.value >= want * 0.1).sort((a, b) => b.value - a.value).slice(0, 14);
+          const walk = (from, pack, v) => {
+            if (pack.length >= 2 && v >= want * 0.85 && v <= want * 1.15) packs.push(pack);
+            if (pack.length >= 4 || v > want * 1.15 || packs.length >= 600) return;
+            for (let i = from; i < top.length; i++) walk(i + 1, [...pack, top[i]], v + top[i].value);
+          };
+          walk(0, [], 0);
+        } else {
+          for (let i = 0; i < assets.length; i++) {
+            packs.push([assets[i]]);
+            for (let j = i + 1; j < assets.length && packs.length < 300; j++) packs.push([assets[i], assets[j]]);
+          }
         }
         for (const pack of packs) {
           const v = pack.reduce((a, x) => a + x.value, 0);
-          if (v < want * 0.8 || v > want * 1.1) continue;
+          if (!star && (v < want * 0.8 || v > want * 1.1)) continue;
           const A = { team: t, players: [p], picks: [] };
           const B = { team: u, players: pack.filter(x => x.player).map(x => x.player), picks: pack.filter(x => x.pick).map(x => x.pick) };
           if (tradeRulesErr(L, A, B) || ntcRefusal(L, A, B)) continue;
-          const score = Math.abs(v - want * 0.95);
+          // What a seller wants for a star: a first-round pick and a young player, on top of the value.
+          const firsts = pack.filter(x => x.pick?.rd === 1).length, seconds = pack.filter(x => x.pick?.rd === 2).length, young = pack.some(x => x.player && x.player.age <= 24);
+          // A rebuilding seller doesn't want veterans back for its star: an old contract only as filler, with a first or
+          // a prospect (23 or under) in the deal.
+          if (star && sellerRebuild && !firsts && !pack.some(x => x.player && x.player.age <= 23)) continue;
+          const old = sellerRebuild ? pack.filter(x => x.player && x.player.age >= 30).length : 0;
+          const score = Math.abs(v - want * 0.95) - (star ? want * (Math.min(2, firsts) * 0.07 + Math.min(2, seconds) * 0.02 + (young ? 0.04 : 0) + 0.08 * (pack.length - 2) - old * 0.12) : 0);
           if (!best || score < best.score) best = { A, B, score };
         }
-        if (best && best.score < want * 0.1) break;
+        if (best && best.score < (star ? 0 : want * 0.1)) break;
       }
       if (!best) continue;
       // The physical: a failed one kills the deal, a flagged one costs the shopping team a 2nd.
@@ -14652,6 +14706,7 @@ function cpuBlockDeals(day) {
       if (p.season) p.season.onTradeBlock = 0;
       const back = [...best.B.players.map(playerName), ...best.B.picks.map(pk => pickLabel(pk))].join(', ');
       const ext = extendAfterTrade(p, best.B.team, (best.B.players.map(x => playerValue(x, state.leagueIdx, ly)).reduce((s, v) => s + v, 0) + best.B.picks.reduce((s, pk) => s + futureValue(pk), 0)) / Math.max(1, want));
+      if (star) starDeals++;
       done.push(`${best.A.team.shortName} send ${playerName(p)} to ${best.B.team.shortName} for ${back}${why[p.id] ? ` (${why[p.id]})` : ''}${ext ? `; he signs a ${Math.max(3, ext.pref)}-year extension` : ''}`);
     }
   }
@@ -15417,9 +15472,9 @@ screens.options = () => {
         <span class="opt-btns full">${btn('optTeam', x.p.id, 'ex', x.c.choice === 'ex', 'Accept')}${btn('optTeam', x.p.id, 'dec', x.c.choice === 'dec', 'Decline')}</span>
         ${x.c.choice === 'ex' ? `<p class="note small up full">${done ? 'Picked up: he can be extended in the extension window.' : 'Picked up: once decisions are final you can talk extension.'}</p>` : ''}</div>`; }).join('') || '<p class="note muted small">No team options this year.</p>'}</div></fieldset>`, !done && myTeamOpts.some(x => !x.c.choice)],
         ['player', 'Player', `      <fieldset class="frame"><legend>Your Player Options</legend><div class="stack">${myPlayerOpts.map(x => `<div class="drill-row wrap">${head(x)}
-        <b class="small ${x.c.choice === 'out' ? 'down' : 'up'}">${esc(x.c.why)}</b>
+        <b class="small ${x.c.choice === 'out' ? 'down full' : 'up'}">${esc(x.c.why)}</b>
         ${x.c.reason && !done ? (x.c.pitch ? (x.c.pitch.ok ? '' : `<p class="note small down full">He heard you out on ${esc(PITCHES[x.c.pitch.kind].promise)}. He's testing the market.</p>`)
-          : `<div class="full"><p class="note small muted">Make him a promise to stay (one try):</p><span class="opt-btns">${Object.entries(PITCHES).map(([k, v]) => `<button class="btn small" data-act="optPitch" data-id="${x.p.id}" data-v="${k}">${esc(v.label)} · ${Math.round(pitchOdds(x.p, x.team, k, x.c.reason) * 100)}%</button>`).join('')}</span></div>`) : ''}</div>`).join('') || '<p class="note muted small">No player options this year.</p>'}</div>
+          : `<div class="full"><p class="note small muted">Make him a promise to stay (one try):</p><span class="opt-btns pitch-btns">${Object.entries(PITCHES).map(([k, v]) => `<button class="btn small" data-act="optPitch" data-id="${x.p.id}" data-v="${k}">${esc(v.label)} · ${Math.round(pitchOdds(x.p, x.team, k, x.c.reason) * 100)}%</button>`).join('')}</span></div>`) : ''}</div>`).join('') || '<p class="note muted small">No player options this year.</p>'}</div>
         ${myPlayerOpts.length ? '<p class="note muted small" style="margin-top:6px">Players typically test free agency when their option is well under market value or they\'re unhappy. Offseason promises are remembered next season.</p>' : ''}</fieldset>`],
         ['qo', 'QOs', `      <fieldset class="frame"><legend>Qualifying Offers</legend><div class="stack">${myQO.map(x => `<div class="drill-row wrap"><span class="grow"><b>${esc(playerName(x.p))}</b> ${lvTag(x.p)}<br><span class="small muted">${esc(posName(x.p))} · ${x.p.age}y · QO $${qoAmount(x.p)}M · worth ~$${marketValue(x.p)}M</span></span>
         <span class="opt-btns full">${btn('optQO', x.p.id, '1', st.qo[x.p.id] === true, 'Offer QO')}${btn('optQO', x.p.id, '0', st.qo[x.p.id] === false, 'Let Walk')}</span></div>`).join('') || '<p class="note muted small">No restricted free agents this year.</p>'}</div>

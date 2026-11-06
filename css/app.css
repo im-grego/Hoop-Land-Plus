@@ -1726,3 +1726,8 @@ fieldset.frame { position: relative; }
 /* A prospect's ceiling read as a range: a dim outline to the top of it, a brighter band across the range. */
 .bar .room.fuzzy { outline-style: dashed; background: color-mix(in srgb, var(--bc) 14%, transparent); }
 .bar .band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--bc) 45%, transparent); }
+/* Promise buttons on a player option: two across, so each label fits on one line. */
+.opt-btns.pitch-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.opt-btns.pitch-btns .btn { min-height: 34px; white-space: nowrap; }
+/* The pick on the clock in the strip under it. */
+.od-item.now { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan); }

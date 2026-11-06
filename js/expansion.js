@@ -276,8 +276,8 @@ export function expansionValue(p, kind, value) {
   let v = value(p);
   if (p.age <= 25) v *= 1.15;
   if (p.age >= 31) v *= 0.8;
-  if (kind === 'ufa') v *= 0.45;
-  if (kind === 'rfa') v *= 0.8;
+  if (kind === 'ufa') v *= 0.65;   // his Bird rights: the one team that can re-sign him over its small first-year cap
+  if (kind === 'rfa') v *= 0.9;
   return v;
 }
 
