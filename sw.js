@@ -1,6 +1,6 @@
 // Offline support: cache-first for the app shell, stale-while-revalidate for
 // fonts and team logos.
-const VERSION = 'hlc-v0.302.0';
+const VERSION = 'hlc-v0.303.0';
 const SHELL = [
   './',
   'index.html',
@@ -31,7 +31,7 @@ const SHELL = [
   'js/recruits.js',
   'js/recruiting.js',
   'js/collegeplus.js',
-  'js/campus.js', 'js/madeprod.js', 'js/helptext.js',
+  'js/campus.js', 'js/madeprod.js', 'js/helptext.js', 'js/schedule.js',
   'js/appearance-pool.js',
   'manifest.webmanifest',
   'icons/icon.svg',

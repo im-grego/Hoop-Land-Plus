@@ -6,6 +6,7 @@ import { collegeProduction, productionWord, setDevPlans, PLAN_ATTRS, DEFAULT_PAR
 import { setMadeLines } from './draft.js';
 import { setMadeGameScores, collegeGameScore } from './progression.js';
 import { makeLines } from './madeprod.js';
+import { buildSchedule, needsSchedule } from './schedule.js';
 import { SCREEN_HELP, SECTION_HELP } from './helptext.js';
 import {
   SKILL_ATTRS, DRAFT_DROP, DRAFT_FLOOR, floorVector, rookieLine, ceilingVector, buildCompPool, prospectComps, prospectValue,
@@ -69,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.302.0';
+const APP_VERSION = '0.303.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1289,6 +1290,11 @@ function buildExport() {
   if (!isCollege() && league().season.phase === 6) { exportCuts(league()); cutWeakSeconds(league()); floorFill(league()); gameCapCheck(league(), league().season.salaryCap); rebuildBlock(league()); for (const t of league().teams) if (!isUserTeam(t) && t.roster.length) LU.applyLineup(t, defaultPlan(t)); }
   if (!isCollege()) { fixLineups(league()); pruneStaleNews(league()); proLeagueFlags(league()); }
   if (!isCollege()) pickWindow(league());
+  // The game made the season's schedule before the expansion draft: new teams would have no games. Rebuild it.
+  if (!isCollege() && needsSchedule(league())) {
+    const r = buildSchedule(league(), saveSalt());
+    toast('🗓️ New schedule for the expanded league', `${league().teams.length} teams, 82 games each over ${r.days} days`, 4000);
+  }
   rememberExport();
   // The game extends a pile of players when the season opens, at values we
   // don't want. A file leaving free agency goes out with everyone's extension
@@ -14631,6 +14637,11 @@ function extendAfterTrade(p, team, ratio) {
   return a;
 }
 
+// A star once (4.5 or 5 stars, an MVP or Finals MVP, two All-NBA teams, two Defensive Player of the Year awards or three
+// All-Star games): even deep into his decline he's never a
+// throw-in. At 30 or older he isn't sent along in a deal for another player (he can still be shopped himself).
+const awardYears = (p, id) => (p.awards || []).filter(a => a.id === id).reduce((n, a) => n + (a.yearsWon?.length || 0), 0);
+const formerStar = p => (p.pot || 0) >= 9 || awardYears(p, 2) > 0 || awardYears(p, 1) > 0 || awardYears(p, 13) >= 2 || awardYears(p, 3) >= 2 || awardYears(p, 101) >= 3;
 function cpuBlockDeals(day) {
   const L = league();
   if (!isComplete() || isCollege()) return [];
@@ -14681,6 +14692,7 @@ function cpuBlockDeals(day) {
         for (const pack of packs) {
           const v = pack.reduce((a, x) => a + x.value, 0);
           if (!star && (v < want * 0.8 || v > want * 1.1)) continue;
+          if (pack.some(x => x.player && x.player.age >= 30 && formerStar(x.player))) continue;   // never sent along in a deal for someone else
           const A = { team: t, players: [p], picks: [] };
           const B = { team: u, players: pack.filter(x => x.player).map(x => x.player), picks: pack.filter(x => x.pick).map(x => x.pick) };
           if (tradeRulesErr(L, A, B) || ntcRefusal(L, A, B)) continue;
@@ -14690,7 +14702,9 @@ function cpuBlockDeals(day) {
           // a prospect (23 or under) in the deal.
           if (star && sellerRebuild && !firsts && !pack.some(x => x.player && x.player.age <= 23)) continue;
           const old = sellerRebuild ? pack.filter(x => x.player && x.player.age >= 30).length : 0;
-          const score = Math.abs(v - want * 0.95) - (star ? want * (Math.min(2, firsts) * 0.07 + Math.min(2, seconds) * 0.02 + (young ? 0.04 : 0) + 0.08 * (pack.length - 2) - old * 0.12) : 0);
+          // Filler (a small piece of the deal) is a young player with a modest ceiling, not a veteran.
+          const filler = pack.filter(x => x.player && x.value < want * 0.3), goodFill = filler.filter(x => x.player.age <= 26 && (x.player.pot || 0) <= 7).length;
+          const score = Math.abs(v - want * 0.95) - (star ? want * (Math.min(2, firsts) * 0.07 + Math.min(2, seconds) * 0.02 + (young ? 0.04 : 0) + 0.08 * (pack.length - 2) - old * 0.12 + goodFill * 0.03) : 0);
           if (!best || score < best.score) best = { A, B, score };
         }
         if (best && best.score < (star ? 0 : want * 0.1)) break;
