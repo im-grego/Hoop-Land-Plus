@@ -1749,3 +1749,7 @@ fieldset.frame { position: relative; }
 .install-steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 .install-steps .share-ico { width: 14px; height: 16px; vertical-align: -2px; color: var(--cyan); }
 .install-card .btn.small { align-self: flex-end; min-width: 110px; }
+/* Discord and bug report row; the report's text box. */
+a.btn { text-decoration: none; }
+.community { margin-top: 8px; }
+.bug-text { width: 100%; font: 13px/1.4 ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg-dark); border: 3px solid var(--btn-edge); padding: 8px; resize: none; margin: 8px 0 12px; }

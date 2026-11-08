@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.308.0';
+const APP_VERSION = '0.309.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -2471,6 +2471,65 @@ const countEvent = name => countHit(name, name, true);
 countHit(runningInstalled() ? '/app' : '/', runningInstalled() ? 'Opened (installed app)' : 'Opened (browser)');
 
 // ---------------------------------------------------------------------------
+// Community: the Discord, and a bug report that gathers what's needed (version, device, save, screen, recent errors)
+// into one message to paste there.
+const DISCORD = 'https://discord.gg/PvCpdYWQr8';
+const recentErrors = [];
+const keepError = m => { if (!m) return; recentErrors.push(String(m).slice(0, 200)); if (recentErrors.length > 5) recentErrors.shift(); };
+window.addEventListener('error', e => keepError(e.message));
+window.addEventListener('unhandledrejection', e => keepError(e.reason?.message || e.reason));
+function deviceLine() {
+  const ua = navigator.userAgent;
+  const dev = /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Other';
+  const br = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${dev} · ${br} · ${runningInstalled() ? 'installed app' : 'browser'}`;
+}
+function bugReportText() {
+  const lines = ['**Hoop Land Plus bug report**', `Version: ${APP_VERSION}`, `Device: ${deviceLine()}`];
+  try {
+    if (state.data) {
+      const L = league(), s = L.season;
+      const mode = isCollege() ? 'College' : CAR.isCareer(L) ? 'Career' : s.mode === 1 ? 'Commissioner' : 'Franchise';
+      const team = L.teams.find(isUserTeam);
+      const step = currentStep();
+      lines.push(`Save: ${s.currentYear} · ${mode} · phase ${s.phase}${step ? ` · step: ${step.title}` : ''}${team ? ` · team: ${team.shortName}` : ''}`);
+    } else lines.push('Save: none loaded');
+  } catch { lines.push('Save: (could not read)'); }
+  const at = state.stack[state.stack.length - 1];
+  lines.push(`Screen: ${at ? at.name + (at.args?.tab ? ` (${at.args.tab})` : '') : '?'}`);
+  if (recentErrors.length) lines.push(`Errors: ${recentErrors.join(' | ')}`);
+  lines.push('', 'What happened: ', 'What I expected: ');
+  return lines.join('\n');
+}
+function communityRow() {
+  return `<div class="grid2 community">
+      <a class="btn left" href="${DISCORD}" target="_blank" rel="noopener" data-count="discord-join"><span class="ico">💬</span> Join Discord</a>
+      <button class="btn left" data-act="bugReport"><span class="ico">🛠</span> Report a Bug</button>
+    </div>`;
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-count="discord-join"]')) countEvent('discord-join'); });
+actions.bugReport = () => {
+  const text = bugReportText();
+  const o = overlay(`<p class="note"><b>Report a bug</b></p>
+    <p class="note small">This copies the details below. Paste them in the Discord's bug channel, fill in the last two lines, and add a screenshot if you can. Nothing is sent from here.</p>
+    <textarea class="bug-text" readonly rows="8">${esc(text)}</textarea>
+    <div class="grid2"><button class="btn off" data-r="0">Cancel</button><button class="btn focus" data-r="1">Copy &amp; Open Discord</button></div>`);
+  o.addEventListener('click', async e => {
+    const b = e.target.closest('[data-r]');
+    if (!b) return;
+    if (b.dataset.r === '1') {
+      let copied = false;
+      try { await navigator.clipboard.writeText(text); copied = true; } catch { /* fall back below */ }
+      if (!copied) { const ta = o.querySelector('.bug-text'); ta.removeAttribute('readonly'); ta.select(); try { copied = document.execCommand('copy'); } catch { /* manual copy */ } }
+      countEvent('bug-report');
+      window.open(DISCORD, '_blank', 'noopener');
+      toast(copied ? 'Copied: paste it in the Discord' : 'Select the text and copy it, then paste it in the Discord');
+    }
+    o.remove();
+  });
+};
+
+// ---------------------------------------------------------------------------
 // Install card: tells people the app can live on their home screen or desktop. Android and desktop Chrome/Edge get a
 // one-tap Install button; iPhone and iPad (no install button allowed there) get the Share → Add to Home Screen steps.
 // Hidden once the app runs installed, or after it's dismissed.
@@ -2525,6 +2584,7 @@ screens.main = () => {
           </div>
         </fieldset>
         <div id="installSlot">${installCard()}</div>
+        ${communityRow()}
         <div class="ver-badge">Version ${APP_VERSION}</div>`,
     });
     return;
@@ -2563,6 +2623,7 @@ screens.main = () => {
         <label class="btn left"><span class="ico">📂</span> Load<input type="file" id="fileInput"></label>
         <button class="btn left" data-act="nav" data-to="export"><span class="ico">💾</span> Export</button>
       </div>
+      ${communityRow()}
       <div class="ver-badge">Version ${APP_VERSION}</div>`,
   });
 };
