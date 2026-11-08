@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.309.0';
+const APP_VERSION = '0.309.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1422,6 +1422,7 @@ actions.downloadLeague = async () => {
   };
   const ok = await give(file);
   if (ok) await give(packFile);
+  if (ok) countEvent('league-file-exported');
   if (ok) toast('League file and pack saved', inArtifact() ? 'Remove .json from the league file name. Load the pack file on any device to give a franchise its traits back.' : 'Start a franchise from the league file. The pack gives it your traits, picks and fans back.');
 };
 
@@ -9144,6 +9145,7 @@ actions.appBackup = async () => {
   const url = URL.createObjectURL(f), a = document.createElement('a');
   a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+  countEvent('backup-saved');
   toast('Backup saved', `${Object.keys(keys).length} items`);
 };
 document.addEventListener('change', async e => {
@@ -9161,6 +9163,7 @@ document.addEventListener('change', async e => {
 actions.labExport = async () => {
   const L = league(), cls = state.labPreview || L.draftClass, meta = state.labPreview ? state.labPrevMeta : labMeta();
   const f = new File([JSON.stringify(CG.packClass(cls, meta, `${L.meta?.saveName || state.fileName} ${draftYear(L)}`))], `${(state.fileName || 'class').replace(/\.[a-z0-9]{2,4}$/i, '')} CLASS ${draftYear(L)}.json`, { type: 'application/json' });
+  countEvent('class-exported');
   if (inArtifact()) { if (await artifactSave(f.name, f)) toast('Class file saved'); return; }
   const url = URL.createObjectURL(f), a = document.createElement('a');
   a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
@@ -15858,6 +15861,7 @@ async function pullTraits() {
 }
 actions.traitsDownload = async () => {
   const f = new File([JSON.stringify(traitsBackup())], traitsFileName(), { type: 'application/json' });
+  countEvent('traits-exported');
   if (inArtifact()) { if (await artifactSave(f.name, f)) toast('Traits file saved'); return; }
   const url = URL.createObjectURL(f), a = document.createElement('a');
   a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
