@@ -1,7 +1,7 @@
 {
-  "name": "Hoop Land+",
-  "short_name": "Hoop Land",
-  "description": "Offseason development for Hoop Land season files.",
+  "name": "Hoop Land Plus",
+  "short_name": "Hoop Land+",
+  "description": "The complete offseason for Hoop Land franchise saves.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

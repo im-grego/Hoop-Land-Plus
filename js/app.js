@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.306.0';
+const APP_VERSION = '0.308.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -774,6 +774,7 @@ async function loadFile(file) {
     state.cal = {}; state.cutSel = {}; state.cutSeeded = false; state.rm = null; state.calLast = undefined;
     preloadLogos(data); state.logoWaited = false;   // start the team logos downloading before the heavy setup
     installData(data);
+    countEvent(state.leagueFile ? 'league-file-loaded' : 'save-loaded');
     if (state.leagueFile) {
       leagueTraitsIn(data.seasonLeagues[0]);
       state.depth = 'complete'; state.dirty = false;
@@ -1363,6 +1364,7 @@ actions.download = async () => {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
   o.remove();
   state.dirty = false;
+  countEvent('save-exported');
   toast('Season file saved');
 };
 
@@ -2450,6 +2452,63 @@ actions.undoAdvance = async () => {
 };
 
 // ---------------------------------------------------------------------------
+// Usage counter (GoatCounter): a visit, and a few moments (a save loaded, a file exported, the app installed), counted
+// on the public site only. No cookies, nothing about the player or the save: just the event's name, the screen size
+// bucket GoatCounter keeps, and where the visit came from.
+const COUNTER = 'https://hooplandplus.goatcounter.com/count';
+const counting = () => /(^|\.)hooplandplus\.com$/.test(location.hostname);
+function countHit(path, title = '', event = false) {
+  if (!counting()) return;
+  try {
+    const q = new URLSearchParams({ p: path, t: title || path, s: `${screen.width},${screen.height},${devicePixelRatio || 1}`, rnd: Math.random().toString(36).slice(2) });
+    if (event) q.set('e', 'true');
+    else if (document.referrer && !document.referrer.includes(location.hostname)) q.set('r', document.referrer);
+    const url = `${COUNTER}?${q}`;
+    if (!(navigator.sendBeacon && navigator.sendBeacon(url))) new Image().src = url;
+  } catch { /* counting never gets in the way */ }
+}
+const countEvent = name => countHit(name, name, true);
+countHit(runningInstalled() ? '/app' : '/', runningInstalled() ? 'Opened (installed app)' : 'Opened (browser)');
+
+// ---------------------------------------------------------------------------
+// Install card: tells people the app can live on their home screen or desktop. Android and desktop Chrome/Edge get a
+// one-tap Install button; iPhone and iPad (no install button allowed there) get the Share → Add to Home Screen steps.
+// Hidden once the app runs installed, or after it's dismissed.
+
+let installEvt = null;
+const INSTALL_HIDE = 'hlc:installHide';
+function runningInstalled() { return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isMacSafari = () => /Macintosh/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Firefox/.test(navigator.userAgent) && !isIOS();
+const SHARE_ICON = '<svg class="share-ico" viewBox="0 0 16 18" aria-label="Share"><path d="M8 1v10M4.5 4.5 8 1l3.5 3.5M3 8H1.5v9h13V8H13" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+function installCard() {
+  let hidden = false;
+  try { hidden = localStorage.getItem(INSTALL_HIDE) === '1'; } catch { /* storage blocked: show it */ }
+  if (hidden || runningInstalled()) return '';
+  let how;
+  if (installEvt) how = `<p class="note small">Add it to your home screen or desktop: it opens full screen like any app and works offline.</p>
+      <button class="btn focus" data-act="installApp">⬇ Install Hoop Land Plus</button>`;
+  else if (isIOS()) how = `<p class="note small">Put it on your home screen: it opens full screen like any app and works offline.</p>
+      <ol class="install-steps small"><li>Tap ${SHARE_ICON} <b>Share</b> in Safari's toolbar</li><li>Scroll down and tap <b>Add to Home Screen</b></li><li>Tap <b>Add</b></li></ol>`;
+  else if (isMacSafari()) how = `<p class="note small">Keep it in your Dock: in Safari's menu bar choose <b>File → Add to Dock</b>.</p>`;
+  else how = `<p class="note small">Add it to your home screen or desktop from your browser's menu: <b>Install app</b> or <b>Add to Home screen</b>.</p>`;
+  return `<fieldset class="frame install-card"><legend>Get the App</legend><div class="stack">${how}
+      <button class="btn small off" data-act="installHide">Not now</button></div></fieldset>`;
+}
+const refreshInstall = () => { const el = document.getElementById('installSlot'); if (el) el.innerHTML = installCard(); };
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; refreshInstall(); });
+window.addEventListener('appinstalled', () => { installEvt = null; refreshInstall(); countEvent('app-installed'); toast('Installed', 'Hoop Land Plus is on your home screen.'); });
+actions.installApp = async () => {
+  if (!installEvt) return;
+  const e = installEvt;
+  e.prompt();
+  const r = await e.userChoice.catch(() => null);
+  if (r?.outcome === 'accepted') installEvt = null;
+  refreshInstall();
+};
+actions.installHide = () => { try { localStorage.setItem(INSTALL_HIDE, '1'); } catch { /* fine */ } refreshInstall(); };
+
+// ---------------------------------------------------------------------------
 // Main menu
 
 screens.main = () => {
@@ -2465,6 +2524,7 @@ screens.main = () => {
               <input type="file" id="fileInput"></label>
           </div>
         </fieldset>
+        <div id="installSlot">${installCard()}</div>
         <div class="ver-badge">Version ${APP_VERSION}</div>`,
     });
     return;

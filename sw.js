@@ -1,6 +1,6 @@
 // Offline support: cache-first for the app shell, stale-while-revalidate for
 // fonts and team logos.
-const VERSION = 'hlc-v0.306.0';
+const VERSION = 'hlc-v0.308.0';
 const SHELL = [
   './',
   'index.html',
@@ -76,6 +76,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.hostname.endsWith('goatcounter.com')) return;   // the usage counter: straight to the network, never cached
   if (url.origin === location.origin) {
     e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req)));
     return;
