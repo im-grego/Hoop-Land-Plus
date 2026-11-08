@@ -1,5 +1,6 @@
-// A regular-season schedule for any number of teams, the way the game lays its own out: 82 games a team (4 against
-// each division rival, 3 or 4 against the rest of the conference, 2 against the other conference), 41 at home, about
+// A regular-season schedule for any number of teams, the way the game lays its own out: 82 games a team from the
+// league's own settings (divisionGames, conferenceGames, nonConferenceGames: 3, 4 and 2 in the NBA file; a league that
+// grew trims conference games to 3 to stay at 82), 41 at home, about
 // 88 game days with nobody playing twice in a day, and the All-Star day (the game's special games, alone) two-thirds of
 // the way in, the trade deadline two days later. Game ids run 1, 2, 3... in day order, the special games last.
 // The game builds the schedule before the expansion draft and never again, so a league that grew in the summer
@@ -21,12 +22,12 @@ export function needsSchedule(L) {
 }
 
 // How many times each pair meets: { 'a-b': n } with a < b.
-function matchups(teams, confOf, rnd) {
+function matchups(teams, confOf, rnd, per = { div: 3, conf: 4, other: 2 }) {
   const n = {}, key = (a, b) => (a < b ? `${a}-${b}` : `${b}-${a}`);
   const left = new Map(teams.map(t => [t.id, GAMES]));
   for (let i = 0; i < teams.length; i++) for (let j = i + 1; j < teams.length; j++) {
     const a = teams[i], b = teams[j];
-    const c = a.division === b.division ? 4 : confOf(a) === confOf(b) ? 3 : 2;
+    const c = a.division === b.division ? per.div : confOf(a) === confOf(b) ? per.conf : per.other;
     n[key(a.id, b.id)] = c; left.set(a.id, left.get(a.id) - c); left.set(b.id, left.get(b.id) - c);
   }
   // Each team still short of 82 picks up a game (one over gives one back) with a team that needs the same: a
@@ -45,8 +46,9 @@ function matchups(teams, confOf, rnd) {
     const cands = teams.filter(b => b !== a && ok(a, b, sign));
     // A partner that needs the same change; failing that, any partner (it then needs the opposite change itself, which
     // a later pass settles).
-    let b = cands.filter(x => Math.sign(left.get(x.id)) === sign).sort((x, y) => rank(a, x) - rank(a, y) || Math.abs(left.get(y.id)) - Math.abs(left.get(x.id)) || rnd() - 0.5)[0];
-    if (!b) b = cands.sort((x, y) => rank(a, x) - rank(a, y) || rnd() - 0.5)[0];
+    const pc = x => sign * n[key(a.id, x.id)];   // trim the pairs that meet most, add to those that meet least
+    let b = cands.filter(x => Math.sign(left.get(x.id)) === sign).sort((x, y) => rank(a, x) - rank(a, y) || pc(x) - pc(y) || Math.abs(left.get(y.id)) - Math.abs(left.get(x.id)) || rnd() - 0.5)[0];
+    if (!b) b = cands.sort((x, y) => rank(a, x) - rank(a, y) || pc(x) - pc(y) || rnd() - 0.5)[0];
     if (!b) break;
     n[key(a.id, b.id)] += sign; left.set(a.id, left.get(a.id) - sign); left.set(b.id, left.get(b.id) - sign);
   }
@@ -116,7 +118,9 @@ export function buildSchedule(L, seed = 1) {
   const old = (S.schedule || []).flatMap(d => d.results || []);
   const tpl = old.find(g => g.gameType === 0) || { league: 0, gameType: 0, tId: 0, tRound: 0, homeScore: 0, awayScore: 0, winner: 0, potg: 0, periods: 0, totalPeriods: 0, homeRecord: [0, 0], awayRecord: [0, 0], forced: -1 };
   const special = old.filter(g => g.gameType !== 0);
-  const days = toDays(homeAway(teams, matchups(teams, confOf, rnd), rnd), teams, rnd);
+  const num = (v, d) => (Number.isFinite(+v) && +v > 0 ? +v : d);
+  const per = { div: num(S.divisionGames, 3), conf: num(S.conferenceGames, 4), other: num(S.nonConferenceGames, 2) };
+  const days = toDays(homeAway(teams, matchups(teams, confOf, rnd, per), rnd), teams, rnd);
   // The All-Star day two-thirds of the way in, with only the special games on it.
   const at = Math.round(days.length * 0.66);
   let gid = 1;
@@ -125,5 +129,7 @@ export function buildSchedule(L, seed = 1) {
   const star = special.map(g => ({ ...g, gId: gid++, homeScore: 0, awayScore: 0, winner: 0, potg: 0 }));
   if (star.length) { sched.splice(at, 0, { results: star }); S.allStarWeekend = at; S.tradeDeadline = Math.min(sched.length - 1, at + 2); }
   S.schedule = sched;
+  // The game hands out new game ids from its counter: it starts after the last one here.
+  if (L.meta) L.meta.uGID = gid - 1;
   return { days: sched.length, games: gid - 1 };
 }

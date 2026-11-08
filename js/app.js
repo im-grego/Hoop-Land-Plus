@@ -10,7 +10,7 @@ import { buildSchedule, needsSchedule } from './schedule.js';
 import { SCREEN_HELP, SECTION_HELP } from './helptext.js';
 import {
   SKILL_ATTRS, DRAFT_DROP, DRAFT_FLOOR, floorVector, rookieLine, ceilingVector, buildCompPool, prospectComps, prospectValue,
-  lotterySetup, lotteryOdds, runLottery, drawLottery, draftOrder, teamRecord, cpuPick, tradePicks, pickValue, lotteryDone, actualDraftOrder, rookieComps,
+  lotterySetup, lotteryOdds, runLottery, drawLottery, hasOwnFirst, draftOrder, teamRecord, cpuPick, tradePicks, pickValue, lotteryDone, actualDraftOrder, rookieComps,
   recoveryFor, projectedRookie, originalRatings, setRecoveryBonus, setReadiness, applySummerLeague, tierFor, scoutingReport, projectedCeiling, scoutedPot, compDistance,
   assignClassComps, rookieFloorVector, collegeLine, rosterSlot,
   needBaseline, teamNeeds, needsFilled, isWinNow, teamStatus, STATUS_NAMES, classScales, draftScore, LOTTERY_FORMATS,
@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.303.0';
+const APP_VERSION = '0.306.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -2365,7 +2365,7 @@ actions.advLottery = async (opts = {}) => {
   savePre();
   state.compCache = {};
   const setup = lotterySetup(L, P.lotteryFormat, P.lotteryDraws);
-  const order = preLotteryOrder(L);
+  const order = preLotteryOrder(L).filter(t => hasOwnFirst(L, t));   // a forfeited first sits out
   const drawn = drawLottery(order.slice(0, setup.lotteryTeams.length), setup.odds, setup.draws, mulberry32(Math.floor(Math.random() * 1e9)), setup.floor);
   const r1 = drawn.map(r => r.team);
   const full = [...r1, ...order.filter(t => !r1.includes(t))];
@@ -3863,7 +3863,7 @@ function careerDealFor(team, target, me) {
   const L = league(), from = L.teams.find(t => t.roster.includes(target)); if (!from || from === team) return null;
   const vy = L.season.phase >= 9 ? dlValueYear() : lastYear(), val = x => playerValue(x, state.leagueIdx, vy), want = val(target);
   const assets = [
-    ...FA.signedRoster(team).filter(x => x !== me && !tradeLock(x) && !justMoved(x)).map(x => ({ player: x, value: val(x) })),
+    ...FA.signedRoster(team).filter(x => x !== me && !tradeLock(x) && !justMoved(x) && !untouchableFiller(L, x, team)).map(x => ({ player: x, value: val(x) })),
     ...team.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, team, pk)).map(pk => ({ pick: pk, value: futureValue(pk) })),
   ].sort((a, b) => b.value - a.value).slice(0, 12);
   let best = null;
@@ -6239,24 +6239,19 @@ function saveExp(v) {
   syncExpansion();
 }
 // The smaller cap for an expansion team's first two seasons, and the restricted free agents who can't go home.
-// The game schedules as many teams as the league's meta says it has (meta.teams), and hands out new team ids from its
-// counter (meta.uTID). A league that grew has to say so, or the new teams get no schedule. Returns true if it changed.
+// The game hands out new team ids from its counter (meta.uTID): it has to be past every team the app added. (The
+// league's meta.teams stays as it was: the game's own expansion leaves it at 30 with 32 teams.) Returns true if changed.
 function fixTeamCount(L) {
   if (!L?.meta || isCollege()) return false;
-  let changed = false;
-  if (L.meta.teams !== L.teams.length) { L.meta.teams = L.teams.length; changed = true; }
   const top = Math.max(0, ...L.teams.map(t => t.id), ...(L.starTeams || []).map(t => t.id));
-  if ((L.meta.uTID ?? 0) < top) { L.meta.uTID = top; changed = true; }
-  if (changed) state.dirty = true;
-  return changed;
+  if ((L.meta.uTID ?? 0) >= top) return false;
+  L.meta.uTID = top;
+  state.dirty = true;
+  return true;
 }
 function syncExpansion() {
   if (!state.data || isCollege()) return;
-  // A save that grew before this was fixed: put the count right on load (the next season's schedule picks them up).
-  if (fixTeamCount(league()) && league().season.phase >= 9 && !state.teamCountWarned) {
-    state.teamCountWarned = true;
-    setTimeout(() => toast('⚠️ The new teams had no schedule', 'This file told the game it had 30 teams, so this season was scheduled without them. Fixed for the export; to play them this season, re-export from a save before the regular season starts.', 9000, true), 400);
-  }
+  fixTeamCount(league());
   const x = expStore() || {}, yr = league().season.currentYear, scale = {};
   for (const [tid, first] of Object.entries(x.capTeams || {})) { const s = EXP.CAP_SCALE[yr - first]; if (s) scale[tid] = s; }
   FA.setCapScale(scale);
@@ -7787,7 +7782,7 @@ function runDeadline() {
         const core = new Set([...u.roster].sort((a, b) => val(b) - val(a)).slice(0, 3));
         // Contenders pay in youth and picks, with a salary to make it work.
         const assets = [
-          ...FA.signedRoster(u).filter(x => !core.has(x) && !tradeLock(x) && !justMoved(x) && (x.age <= 25 || (x.contract?.yrs <= 1 && !extPending(x)))).map(x => ({ player: x, value: val(x), young: x.age <= 25 })),
+          ...FA.signedRoster(u).filter(x => !core.has(x) && !tradeLock(x) && !justMoved(x) && !untouchableFiller(L, x, u) && (x.age <= 25 || (x.contract?.yrs <= 1 && !extPending(x)))).map(x => ({ player: x, value: val(x), young: x.age <= 25 })),
           ...u.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, u, pk)).map(pk => ({ pick: pk, value: futureValue(pk), young: true })),
         ];
         for (let i = 0; i < assets.length; i++) for (let j = i; j < assets.length; j++) {
@@ -11097,16 +11092,28 @@ screens.capital = (args = {}) => {
     const n = protTop(pr.top);
     return ` <span class="small gold">${protName(pr.top)} protected</span><br><span class="small muted">${mine ? `Stays with ${esc(whom)} if it lands in the top ${n}.` : `Goes back to ${esc(name(pk.otid))} if it lands in the top ${n}.`}</span>`;
   };
+  // The real trade behind a pick (or a swap) the real-picks list placed, behind a ?.
+  const team = id => L.teams.find(x => x.id === id);
+  const realWhy = (yr, rd, from, to) => {
+    const n = RP.tradeNote(L, yr, rd, team(from), team(to));
+    return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p><b>${yr} round ${rd}: ${esc(name(from))} to ${esc(name(to))}</b></p><p>${esc(n)}.</p><p class="small muted">The real-world deal behind it (as of November 2026). Protections are rounded to the ones trades use here: top 3, top 8 or lottery.</p>`)}` : '';
+  };
   let held1 = 0, held2 = 0, out = 0, total = 0;
   const yearBlocks = years.map(yr => {
     const rows = [];
     for (const rd of [1, 2]) {
       const own = all.find(x => x.pk.otid === t.id && x.pk.yr === yr && x.pk.rd === rd);
-      if (!own) rows.push(`<div class="cap-row out"><b>R${rd}</b><span class="grow">${esc(Whose)} pick: <span class="down">gone</span> <span class="small muted">(forfeited or not in the league's books)</span></span></div>`);
+      if (!own) {
+        // The real-world penalty (the Clippers' firsts, and Indiana's 2029 first that was owed to them) says so.
+        const pen = setupFlags().picks && RP.FORFEITED.find(f => f.yr === yr && f.rd === rd && RP.teamFor(L, f.team) === t);
+        const why = pen ? (pen.team === 'IND' ? 'It was owed to the Clippers, whose firsts the league took away as a penalty' : 'Taken away by the league as a penalty (the cap-circumvention ruling)') : 'Forfeited, or not in the league\'s books';
+        const effect = rd === 1 ? `That draft has one first fewer, and ${esc(whom)} ${me ? 'sit' : 'sits'} out its lottery.` : 'That draft has one second fewer.';
+        rows.push(`<div class="cap-row out"><b>R${rd}</b><span class="grow">${esc(Whose)} pick: <span class="down">${pen ? 'forfeited' : 'gone'}</span><br><span class="small muted">${esc(why)}. ${effect}</span></span></div>`);
+      }
       else if (own.holder === t) { rows.push(`<div class="cap-row"><b>R${rd}</b><span class="grow">${esc(Whose)} own pick${protTxt(own.pk, true)}</span><span class="small muted">${val(own.pk)}</span></div>`); rd === 1 ? held1++ : held2++; total += val(own.pk); }
-      else { rows.push(`<div class="cap-row out"><b>R${rd}</b><span class="grow">${esc(Whose)} pick is owed to <b>${esc(own.holder.shortName)}</b>${protTxt(own.pk, true)}</span><span class="small muted">${val(own.pk)}</span></div>`); out++; }
+      else { rows.push(`<div class="cap-row out"><b>R${rd}</b><span class="grow">${esc(Whose)} pick is owed to <b>${esc(own.holder.shortName)}</b>${realWhy(yr, rd, t.id, own.holder.id)}${protTxt(own.pk, true)}</span><span class="small muted">${val(own.pk)}</span></div>`); out++; }
       for (const x of all.filter(x => x.holder === t && x.pk.otid !== t.id && x.pk.yr === yr && x.pk.rd === rd)) {
-        rows.push(`<div class="cap-row in"><b>R${rd}</b><span class="grow">From <b>${esc(name(x.pk.otid))}</b>${protTxt(x.pk, false)}</span><span class="small up">${val(x.pk)}</span></div>`);
+        rows.push(`<div class="cap-row in"><b>R${rd}</b><span class="grow">From <b>${esc(name(x.pk.otid))}</b>${realWhy(yr, rd, x.pk.otid, t.id)}${protTxt(x.pk, false)}</span><span class="small up">${val(x.pk)}</span></div>`);
         rd === 1 ? held1++ : held2++; total += val(x.pk);
       }
       for (const e of swaps.filter(e => e.yr === yr && e.rd === rd)) {
@@ -11114,7 +11121,7 @@ screens.capital = (args = {}) => {
         const mine = e.a === t.id ? `${esc(Who)} ${gets} the ${better ? 'better' : 'worse'} of the ${esc(name(e.x))} and ${esc(name(e.y))} picks; ${esc(b)} the other.`
           : e.b === t.id ? `${esc(a)} get the ${better ? 'better' : 'worse'} of the ${esc(name(e.x))} and ${esc(name(e.y))} picks; ${esc(whom)} ${me ? 'get' : 'gets'} the other.`
           : `${esc(Whose)} pick is in a swap: ${esc(a)} get the ${better ? 'better' : 'worse'} of the ${esc(name(e.x))} and ${esc(name(e.y))} picks, ${esc(b)} the other.`;
-        rows.push(`<div class="cap-row swap"><b>⇄</b><span class="grow small">${mine}</span></div>`);
+        rows.push(`<div class="cap-row swap"><b>⇄</b><span class="grow small">${mine}${e.mode === 'best' ? realWhy(yr, rd, e.y, e.x) : ''}</span></div>`);
       }
     }
     return `<fieldset class="frame"><legend>${yr} Draft</legend><div class="stack">${rows.join('')}</div></fieldset>`;
@@ -13507,9 +13514,10 @@ function swapPair(itemsA, itemsB) {
   const pa = itemsA.filter(x => x.pick), pb = itemsB.filter(x => x.pick);
   if (pa.length !== 1 || pb.length !== 1) return null;
   const [xa] = pa, [xb] = pb;
-  const yr = league().season.currentYear;
+  // Any draft still ahead, the next one included (firsts or seconds, the same year and round on both sides).
+  const L = league(), next = draftYear(L) + draftBehind(L);
   if (!xa.key.startsWith('f:') || !xb.key.startsWith('f:') || xa.locked || xb.locked) return null;
-  if (xa.pick.yr !== xb.pick.yr || xa.pick.rd !== xb.pick.rd || xa.pick.yr <= yr || xa.pick.otid === xb.pick.otid) return null;
+  if (xa.pick.yr !== xb.pick.yr || xa.pick.rd !== xb.pick.rd || xa.pick.yr < next || xa.pick.otid === xb.pick.otid) return null;
   if (swapOf(xa.pick) || swapOf(xb.pick)) return null;
   return { xa, xb };
 }
@@ -14641,6 +14649,9 @@ function extendAfterTrade(p, team, ratio) {
 // All-Star games): even deep into his decline he's never a
 // throw-in. At 30 or older he isn't sent along in a deal for another player (he can still be shopped himself).
 const awardYears = (p, id) => (p.awards || []).filter(a => a.id === id).reduce((n, a) => n + (a.yearsWon?.length || 0), 0);
+// Never thrown into a CPU deal for another player: a franchise lifer, or a former star at 30 or older. (You can still ask
+// for either in a trade you build.)
+const untouchableFiller = (L, p, t) => FA.isLifer(L, p, t) || (p.age >= 30 && formerStar(p));
 const formerStar = p => (p.pot || 0) >= 9 || awardYears(p, 2) > 0 || awardYears(p, 1) > 0 || awardYears(p, 13) >= 2 || awardYears(p, 3) >= 2 || awardYears(p, 101) >= 3;
 function cpuBlockDeals(day) {
   const L = league();
@@ -14670,7 +14681,7 @@ function cpuBlockDeals(day) {
       for (const u of buyers.sort(() => rng() - 0.5).slice(0, 12)) {
         const stars = new Set([...u.roster].sort((a, b) => playerValue(b, state.leagueIdx, ly) - playerValue(a, state.leagueIdx, ly)).slice(0, 2));
         const assets = [
-          ...FA.signedRoster(u).filter(x => !stars.has(x) && !tradeLock(x) && x.contract?.yrs > 0).map(x => ({ player: x, value: playerValue(x, state.leagueIdx, ly) })),
+          ...FA.signedRoster(u).filter(x => !stars.has(x) && !tradeLock(x) && x.contract?.yrs > 0 && !untouchableFiller(L, x, u)).map(x => ({ player: x, value: playerValue(x, state.leagueIdx, ly) })),
           ...u.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, u, pk)).map(pk => ({ pick: pk, value: futureValue(pk) })),
         ];
         const packs = [];
@@ -14692,7 +14703,6 @@ function cpuBlockDeals(day) {
         for (const pack of packs) {
           const v = pack.reduce((a, x) => a + x.value, 0);
           if (!star && (v < want * 0.8 || v > want * 1.1)) continue;
-          if (pack.some(x => x.player && x.player.age >= 30 && formerStar(x.player))) continue;   // never sent along in a deal for someone else
           const A = { team: t, players: [p], picks: [] };
           const B = { team: u, players: pack.filter(x => x.player).map(x => x.player), picks: pack.filter(x => x.pick).map(x => x.pick) };
           if (tradeRulesErr(L, A, B) || ntcRefusal(L, A, B)) continue;
@@ -16275,7 +16285,7 @@ function overviewTeam(L, t) {
       <h4 class="ov-h">Options (${books.options.length})</h4><div class="stack">${books.options.map(x => row(x, valTag(x.sal, x.worth), `<br>${x.kind === 'team' ? 'Team' : 'Player'} option $${x.sal}M · market value $${x.worth}M`)).join('') || '<p class="note small muted">None.</p>'}</div>
       <h4 class="ov-h">Extension Eligible (${books.ext.length})</h4><div class="stack">${books.ext.map(x => row(x, '', `<br>Final year $${x.sal}M · market value $${x.worth}M`)).join('') || '<p class="note small muted">None.</p>'}</div>
     </fieldset>
-    <fieldset class="frame"><legend>Roster Needs</legend>${infoBtn('needs', '<p class="small"><span class="sev s3" style="display:inline-block"></span> Red: a big need, fix it this summer.</p><p class="small"><span class="sev s2" style="display:inline-block"></span> Gold: a real need.</p><p class="small"><span class="sev s1" style="display:inline-block"></span> Grey: minor, worth watching.</p><p class="small muted">Depth: not enough rotation players at the spot. Starter: no starter-level player. Upside: no young player with starter potential. Age: the group is getting old. Style: a missing skill (spacing, rim pressure, playmaking, rim protection, rebounding).</p>')}<div class="stack">${needs.map(n => `<div class="need-row">${sevDot(n.sev)}<span class="badge need">${esc(n.group === 'style' ? 'Style' : `${n.group[0].toUpperCase()}${n.group.slice(1)} · ${n.kind}`)}</span><span class="small grow">${esc(n.text)}</span></div>`).join('') || '<p class="note small muted">No real holes.</p>'}</div>
+    <fieldset class="frame"><legend>Roster Needs</legend>${infoBtn('needs', '<p class="small"><span class="sev s3" style="display:inline-block"></span> Red: a big need, fix it this summer.</p><p class="small"><span class="sev s2" style="display:inline-block"></span> Gold: a real need.</p><p class="small"><span class="sev s1" style="display:inline-block"></span> Blue: minor, worth watching.</p><p class="small muted">Depth: not enough rotation players at the spot. Starter: no starter-level player. Upside: no young player with starter potential. Age: the group is getting old. Style: a missing skill (spacing, rim pressure, playmaking, rim protection, rebounding).</p>')}<div class="stack">${needs.map(n => `<div class="need-row">${sevDot(n.sev)}<span class="badge need">${esc(n.group === 'style' ? 'Style' : `${n.group[0].toUpperCase()}${n.group.slice(1)} · ${n.kind}`)}</span><span class="small grow">${esc(n.text)}</span></div>`).join('') || '<p class="note small muted">No real holes.</p>'}</div>
 </fieldset>
     <button class="btn" data-act="nav" data-to="capital" data-arg="${t.id}">📋 Draft Capital: every pick, protection and swap</button>
 `;
@@ -18323,7 +18333,9 @@ function applyRealPicksNow() {
     const led = protLedger();
     for (const e of r.protections) if (!led.some(x => x.otid === e.otid && x.yr === e.yr && !x.done)) led.push(e);
     saveProt(led);
-    const sl = swapLedger();
+    // Swaps an earlier version of the list had that aren't real come off the ledger first.
+    const gone = RP.PREV_SWAPS_GONE.map(w => ({ yr: w.yr, rd: w.rd, x: RP.teamFor(L, w.best)?.id, y: RP.teamFor(L, w.worst)?.id }));
+    const sl = swapLedger().filter(e => e.done || !gone.some(g => g.yr === e.yr && g.rd === e.rd && g.x === e.x && g.y === e.y));
     for (const e of r.swaps) if (!sl.some(x => !x.done && x.yr === e.yr && x.rd === e.rd && x.x === e.x && x.y === e.y)) sl.push(e);
     saveSwaps(sl);
   }
@@ -18376,7 +18388,7 @@ actions.applyRealPicks = async () => {
   checkpoint('Real picks');
   const r = applyRealPicksNow();
   render();
-  toast('Real picks applied', `${r.moved} moved · ${r.kept} already traded in the game stayed · ${r.voided} forfeited removed · ${isComplete() ? `${r.protections.length} protections · ${r.swaps.length} swaps` : 'protections and swaps need Complete mode'}`);
+  toast('Real picks applied', `${r.corrected ? `${r.corrected} corrected from an older list · ` : ''}${r.moved} moved · ${r.kept} already traded in the game stayed · ${r.voided} forfeited removed · ${isComplete() ? `${r.protections.length} protections · ${r.swaps.length} swaps` : 'protections and swaps need Complete mode'}`);
 };
 actions.buyoutToggle = d => { const b = (state.buyoutSel ||= {}); b[+d.id] = !b[+d.id]; render(); };
 

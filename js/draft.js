@@ -632,9 +632,17 @@ export function seedOrder(league) {
 
 // `format` is '321', 'top4' or 'old' ('auto' picks from the league's
 // settings). The last argument is unused (kept for older callers).
+// A team with no first-round pick of its own this year (forfeited, like the Clippers' 2030-2033 firsts) sits out the
+// lottery: there's no pick for its ball to win. A pick that was traded is still in it, for its new owner.
+export function hasOwnFirst(league, team) {
+  // The next draft: this year's before it's held (pre-lottery to pre-draft), next year's any other time.
+  const ph = league.season.phase, yr = draftYear(league) + (ph >= 2 && ph <= 4 ? 0 : 1);
+  if (!league.teams.some(t => t.draftPicks.some(pk => pk.yr === yr && pk.rd === 1))) return true;   // no picks on file
+  return !!pickOwner(league, yr, 1, team.id);
+}
 export function lotterySetup(league, format = 'auto', _unused) {
   const s = league.season;
-  const table = seedOrder(league);
+  const table = seedOrder(league).filter(r => hasOwnFirst(league, r.team));
   const fmt = lotteryFormatOf(league, format);
   const F = LOTTERY_FORMATS[fmt];
   const n = Math.min(F.teams || s.lotteryTeams || 14, table.length);
