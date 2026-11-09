@@ -1816,4 +1816,11 @@ a.btn { text-decoration: none; }
 .coach-top img { margin-right: 2px; }
 .coach-top b + .muted { margin-left: 4px; }
 .coach-row > .coach-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.roadmap-btn { width: 100%; margin-top: 8px; }
+/* Roadmap on the left, the version on the right, one line at the bottom. */
+.ver-row { display: flex; align-items: stretch; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.ver-row .roadmap-btn { width: auto; margin: 0; padding: 8px 14px; font-size: 15px; }
+.ver-row .ver-badge { margin: 0; align-self: stretch; display: flex; align-items: center; }
+/* My Team: History | Contracts, then the small Fans | Chemistry boxes. */
+.team-links { margin-bottom: 8px; }
+.team-mini { margin-bottom: 8px; }
+.team-mini .mini-box { min-height: 0; padding: 8px 10px; line-height: 1.25; text-align: left; }

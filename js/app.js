@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.322.4';
+const APP_VERSION = '0.322.6';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = '0.1.0 Beta';
 const $app = document.getElementById('app');
@@ -2412,7 +2412,7 @@ const STEP_SCREENS = {
   dev: ['staff', 'meeting', 'offseason', 'report', 'mentor', 'rookies', 'trainer', 'strength', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'teamBooks', 'coaches', 'coach'], media: ['storylines', 'survey'], cuts: ['cuts', 'latefa', 'liveTrade'], rotation: ['lineup', 'player'], export: ['export'],
   review: ['review', 'teamStats', 'player'], waters: ['waters', 'player'], nil: ['nil', 'player'], retention: ['retention', 'player'], carousel: ['carousel'], camps: ['camps', 'recruitee'], legacy: ['legacy', 'player'], schedule: ['schedule'], tour: ['tour', 'player'], walkons: ['walkons', 'player'], redshirt: ['redshirt', 'player'], madness: ['madness'], mediaday: ['mediaday', 'player'], departures: ['departures'], seniors: ['seniors'], portal: ['portal'], showcase: ['showcase', 'recruitee'], rw1: ['recruit', 'recruitee', 'recruitweek'], rw2: ['recruit', 'recruitee', 'recruitweek'], rw3: ['recruit', 'recruitee', 'recruitweek'], rw4: ['recruit', 'recruitee', 'recruitweek'], signing: ['signing'], preseason: ['preseason'], rosterlock: ['rosterlock'], practice: ['practice'], summer: ['offseason', 'report', 'mentor', 'trainer', 'strength', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook'],
 };
-const ALWAYS = ['grads', 'fantasy', 'expansion', 'history', 'faces', 'gleague', 'fanLog', 'nbaSetup', 'export', 'checkin', 'myteams', 'ledger', 'career', 'careerFA', 'lineup', 'deadline', 'playoffs', 'main', 'editor', 'settings', 'roster', 'payroll', 'capital', 'classLab', 'coaching', 'news', 'search', 'transactions', 'rumors', 'player', 'leaders', 'prospect', 'coachtree', 'facilities', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'coaches', 'coach', 'teamBooks'];
+const ALWAYS = ['chemistry', 'roadmap', 'grads', 'fantasy', 'expansion', 'history', 'faces', 'gleague', 'fanLog', 'nbaSetup', 'export', 'checkin', 'myteams', 'ledger', 'career', 'careerFA', 'lineup', 'deadline', 'playoffs', 'main', 'editor', 'settings', 'roster', 'payroll', 'capital', 'classLab', 'coaching', 'news', 'search', 'transactions', 'rumors', 'player', 'leaders', 'prospect', 'coachtree', 'facilities', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'coaches', 'coach', 'teamBooks'];
 function screenAllowed(name) {
   if (!state.data || ALWAYS.includes(name)) return true;
   if (name === 'teams' && !isCollege() && phaseRank(league().season) === 0) return true;   // Franchise Setup: pick your teams
@@ -2591,7 +2591,7 @@ function communityRow() {
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-count="discord-join"]')) countEvent('discord-join'); });
 // The roadmap: what's here, what's next, what's further out.
-const roadmapBtn = () => '<button class="btn left full roadmap-btn" data-act="nav" data-to="roadmap"><span class="ico">🗺️</span> Roadmap: What\'s Coming</button>';
+const roadmapBtn = () => '<button class="btn left roadmap-btn" data-act="nav" data-to="roadmap"><span class="ico">🗺️</span> Roadmap</button>';
 const ROADMAP = [
   ['✅ In the beta now', 'up', [
     ['The full offseason', 'Lottery, scouting, the draft, contracts, free agency, trades, training camp and final cuts, for Franchise saves.'],
@@ -2693,8 +2693,7 @@ screens.main = () => {
         </fieldset>
         <div id="installSlot">${installCard()}</div>
         ${communityRow()}
-        ${roadmapBtn()}
-        <div class="ver-badge">Version ${SHOWN_VERSION}</div>`,
+        <div class="ver-row">${roadmapBtn()}<div class="ver-badge">Version ${SHOWN_VERSION}</div></div>`,
     });
     return;
   }
@@ -2712,20 +2711,18 @@ screens.main = () => {
         <div class="grow"><b>${esc(L.leagueName || L.shortName)}</b>
           <span class="note small">${esc(isCollege() ? collegePhaseName(s) : phaseName(s))} · ${CAR.isCareer(L) ? 'Career mode' : `Your ${isCollege() || isFranchise() ? (isCollege() ? 'school' : 'team') : 'teams'}: ${esc(yourTeams)}`}</span></div>
       </div>
-      ${fileCheckCard()}
+      ${FRANCHISE_ONLY() ? '' : fileCheckCard()}
       ${retireeCard()}
       ${careerCard()}
       ${expAskCard()}
       ${calendarCard()}
-      ${coachMarketCard()}
       <div class="grid2">
         ${L.teams.some(isUserTeam) ? '<button class="btn left" data-act="nav" data-to="roster"><span class="ico">👥</span> My Team</button>' : ''}
-        <button class="btn left" data-act="nav" data-to="editor"><span class="ico">🏀</span> League</button>
+        ${!isCollege() && myTeam() ? '<button class="btn left" data-act="nav" data-to="coaching"><span class="ico">🧑‍🏫</span> My Coach</button>' : ''}
+        <button class="btn left" data-act="nav" data-to="editor"><span class="ico">🏀</span> My League</button>
+        ${isCollege() ? '' : '<button class="btn left" data-act="nav" data-to="rumors"><span class="ico">📰</span> Hoop Gram</button>'}
       </div>
-      <div class="grid2">
-        ${!isCollege() && !isFranchise() && !CAR.isCareer(L) && state.userTeams.size ? `<button class="btn left" data-act="nav" data-to="myteams"><span class="ico">🗂️</span> My Teams <span class="note small">${state.userTeams.size}${state.autoTeams.size ? ` · ${state.autoTeams.size} on autopilot` : ''}</span></button>` : ''}
-        ${isCollege() ? '' : '<button class="btn left" data-act="nav" data-to="rumors"><span class="ico">📰</span> League News</button>'}
-      </div>
+      ${!isCollege() && !isFranchise() && !CAR.isCareer(L) && state.userTeams.size ? `<div class="grid2"><button class="btn left" data-act="nav" data-to="myteams"><span class="ico">🗂️</span> My Teams <span class="note small">${state.userTeams.size}${state.autoTeams.size ? ` · ${state.autoTeams.size} on autopilot` : ''}</span></button></div>` : ''}
       <input type="search" class="sel-team" placeholder="🔎 Find any player" data-change="pSearch" style="margin-top:8px">
       <div class="grid3">
         <button class="btn left" data-act="nav" data-to="settings"><span class="ico">☰</span> Settings</button>
@@ -2733,8 +2730,7 @@ screens.main = () => {
         <button class="btn left" data-act="nav" data-to="export"><span class="ico">💾</span> Export</button>
       </div>
       ${communityRow()}
-      ${roadmapBtn()}
-      <div class="ver-badge">Version ${SHOWN_VERSION}</div>`,
+      <div class="ver-row">${roadmapBtn()}<div class="ver-badge">Version ${SHOWN_VERSION}</div></div>`,
   });
 };
 
@@ -3560,6 +3556,28 @@ function careerChips() {
   const chip = k => { const net = ledgerNet(k); return `<button class="btn tiny coin-chip" data-act="nav"${on ? ' data-replace="1"' : ''} data-to="ledger" data-arg="${k}" aria-label="${LEDGER[k].label}">${LEDGER[k].icon} ${ledgerGet(k).toLocaleString()}${net ? ` <span class="${net > 0 ? 'up' : 'down'}">${net > 0 ? '+' : ''}${net.toLocaleString()}</span>` : ''}</button>`; };
   return `<div class="career-chips">${chip('coins')}${chip('fans')}</div>`;
 }
+// Chemistry: the locker room's mood (average morale) and how each player's moved since the offseason began.
+function chemOf(t) {
+  const ps = FA.signedRoster(t), ids = new Set(ps.map(p => p.id));
+  const net = new Map();
+  for (const x of calFlags().moraleLog || []) if (ids.has(x.pid)) { const r = net.get(x.pid) || { d: 0, why: [] }; r.d += x.to - x.from; r.why.push({ d: x.to - x.from, why: x.why }); net.set(x.pid, r); }
+  const avg = ps.length ? Math.round(ps.reduce((a, p) => a + (p.season?.morale ?? 60), 0) / ps.length) : 0;
+  return { ps, net, avg, up: [...net.values()].filter(r => r.d > 0).length, down: [...net.values()].filter(r => r.d < 0).length };
+}
+screens.chemistry = (args = {}) => {
+  const t = league().teams.find(x => x.id === +args.arg) || myTeam();
+  if (!t) { back(); return; }
+  const ch = chemOf(t);
+  const rows = ch.ps.map(p => ({ p, r: ch.net.get(p.id) })).sort((a, b) => Math.abs(b.r?.d || 0) - Math.abs(a.r?.d || 0) || (b.p.season?.morale ?? 0) - (a.p.season?.morale ?? 0));
+  layout({
+    title: 'Chemistry',
+    body: `<fieldset class="frame"><legend>🤝 ${esc(t.shortName)} Locker Room · ${ch.avg}</legend>
+      <p class="note small muted">Average morale across the roster (0 to 100), and how each player's mood has moved since the offseason began: new deals, roles, promises, trades and teammates.</p>
+      <div class="stack">${rows.map(({ p, r }) => `<div class="drill-row wrap"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${moraleTag(p)}${r ? ` <span class="${r.d > 0 ? 'up' : r.d < 0 ? 'down' : 'muted'}">${r.d > 0 ? '▲' : r.d < 0 ? '▼' : ''}${Math.abs(r.d) || '±0'}</span>` : ' <span class="muted small">no change</span>'}
+        ${r ? `<br><span class="small muted">${r.why.map(x => `${x.d > 0 ? '+' : ''}${x.d} ${esc(x.why)}`).join(' · ')}</span>` : ''}</span></div>`).join('')}</div>
+    </fieldset>`,
+  });
+};
 screens.fanLog = () => {
   const t = myTeam(), log = fanLog().filter(x => x.tid === t?.id).reverse();
   layout({
@@ -9038,8 +9056,12 @@ screens.roster = (args) => {
         <h2 class="team-title">${esc(teamFull(t))}</h2>
         ${many ? `<button class="nav-btn" data-act="nav" data-replace="1" data-to="roster" data-arg="${nextT.id}" aria-label="Next team">▶</button>` : '<span></span>'}
       </div>
-      ${rosterCoachLine(t)}${isUserTeam(t) && t.frontOffice && isComplete() && !isCollege() ? `<button class="btn left small fans-row" data-act="nav" data-to="fanLog"><span class="ico">👥</span> Fans <b>${t.frontOffice.fans ?? 50}</b><span class="muted small">/ 100 · what moved them</span></button>` : ''}
-      ${!isCollege() ? `<div class="grid2" style="margin-bottom:8px"><button class="btn small" data-act="nav" data-to="payroll" data-arg="${t.id}">📒 Five-Year Payroll</button><button class="btn small" data-act="nav" data-to="lineup" data-arg="${t.id}">🔁 Lineup & Minutes</button></div><button class="btn small" data-act="nav" data-to="history" data-arg="${t.id}" style="margin-bottom:8px">📜 Franchise History</button>` : ''}
+      ${rosterCoachLine(t)}
+      ${!isCollege() ? `<div class="grid2 team-links"><button class="btn small" data-act="nav" data-to="history" data-arg="${t.id}">📜 History</button><button class="btn small" data-act="nav" data-to="payroll" data-arg="${t.id}">📒 Contracts</button></div>` : ''}
+      ${isUserTeam(t) && t.frontOffice && isComplete() && !isCollege() ? (() => { const ch = chemOf(t); return `<div class="grid2 team-mini">
+        <button class="btn left small mini-box" data-act="nav" data-to="fanLog"><span class="ico">👥</span> <span>Fans <b>${t.frontOffice.fans ?? 50}</b><br><span class="muted small">/ 100</span></span></button>
+        <button class="btn left small mini-box" data-act="nav" data-to="chemistry" data-arg="${t.id}"><span class="ico">🤝</span> <span>Chemistry <b>${ch.avg}</b><br><span class="small"><span class="up">▲${ch.up}</span> <span class="down">▼${ch.down}</span></span></span></button>
+      </div>`; })() : ''}
       ${movesBox(L, t)}
       ${rosterBreakdownBox(t)}
       <div class="list">${rows.map(({ p, d }) => playerRow(p, d)).join('')}</div>`,
@@ -9433,12 +9455,11 @@ screens.coaching = () => {
   const field = allCoaches().staff.map(x => x.c);
   const best = pool.map(x => ({ ...x, g: coachGrade(x.c, field) })).sort((a, b) => (b.g.now ?? 0) - (a.g.now ?? 0)).slice(0, 4);
   layout({
-    title: 'Coaching',
+    title: 'My Coach',
     body: `${coachCard()}
       ${best.length ? `<fieldset class="frame"><legend>On the Market</legend><div class="stack">${best.map(({ c, g }) => `<button class="pb-book coach-row" data-act="nav" data-to="coach" data-arg="${c.id}"><span class="coach-top"><b>${esc(`${c.fn} ${c.ln}`)}</b><span class="muted small">${esc(coachArch(c))} · ${esc(g.tier)}</span></span><span class="small muted">📒 ${esc(signatureOf(c))}</span></button>`).join('')}</div>
         <button class="btn small" data-act="nav" data-to="coaches" style="margin-top:6px">🧑‍🏫 Every Coach</button></fieldset>` : ''}
       ${medBox()}
-      ${posShiftBox()}
       ${isCollege() ? '' : hotSeatBox(L)}
       ${coachChangesBox()}`,
   });
@@ -9644,7 +9665,7 @@ screens.news = (args = {}) => {
   else if (tab === 'coachnews') body = (hotSeatBox(league()) + coachChangesBox()) || '<p class="note small muted">No coaching news yet. CPU teams make their moves once free agency opens.</p>';
   else if (tab === 'cputrades') { const log = offGet('cpuTrades'); const list = Array.isArray(log) ? log : []; body = list.length ? `<div class="stack">${list.map(x => `<p class="note small" style="margin:0">🔁 ${esc(x)}</p>`).join('')}${(calFlags().dumpLog || []).map(x => `<p class="note small" style="margin:0">💸 ${esc(x)}</p>`).join('')}</div>` : (calFlags().dumpLog || []).length ? `<div class="stack">${calFlags().dumpLog.map(x => `<p class="note small" style="margin:0">💸 ${esc(x)}</p>`).join('')}</div>` : '<p class="note small muted">No CPU trades yet.</p>'; }
   else body = reportCard() || '<p class="note small muted">The report card comes out at Opening Night.</p>';
-  layout({ title: 'League News', body: newsTabs(tab) + body });
+  layout({ title: 'Hoop Gram', body: newsTabs(tab) + body });
 };
 
 // Quick actions on a player's page, only what the current step allows: trade for him (or shop him), the block,
@@ -9793,7 +9814,7 @@ screens.transactions = (args = {}) => {
   rows.sort((x, y) => shownLevel(y.p) - shownLevel(x.p));
   const note = { sign: 'Free agents and portal moves this offseason, best first.', trade: 'Trades this offseason, the best player involved first.', block: 'Players teams are shopping. They could be on the move.' }[tab];
   layout({
-    title: 'League News',
+    title: 'Hoop Gram',
     body: `${newsTabs('transactions')}<div class="tabs fa-tabs">${[['sign', 'Signings'], ['trade', 'Trades'], ['block', 'The Block']].map(([k, l]) => `<button class="btn small ${k === tab ? 'on focus' : 'off'}" data-act="txTab" data-v="${k}">${l}</button>`).join('')}</div>
       <p class="note small muted">${note}</p>
       ${tab === 'trade' ? tradeBlocks(L) : `<div class="list">${rows.slice(0, 60).map(r => card(r.p, r.a, r.b)).join('') || '<p class="note small muted">Nothing yet.</p>'}</div>`}`,
@@ -9836,7 +9857,7 @@ screens.rumors = () => {
   }
   list.sort((x, y) => y.heat - x.heat || y.level - x.level);
   layout({
-    title: 'League News',
+    title: 'Hoop Gram',
     body: `${newsTabs('rumors')}${(() => { const cpu = Object.entries(shiftStore()).filter(([, r]) => r.cpu).map(([pid, r]) => ({ pid: +pid, ...r })); return cpu.length ? `<fieldset class="frame"><legend>🏀 From Camp</legend><div class="stack">${cpu.map(shiftRumor).join('')}</div></fieldset>` : ''; })()}<p class="note small muted">Whispers about who could be on the move. Some of it comes true, some doesn't.</p>
       <div class="stack">${list.slice(0, 30).map(rumorPost).join('') || '<p class="note small muted">Quiet around the league.</p>'}</div>`,
   });
@@ -19940,7 +19961,7 @@ screens.editor = (args = {}) => {
       ${view ? '' : `<fieldset class="frame"><legend>Export</legend><p class="note small">Writes the league file with your edits. Start a new save from it in the game.</p><button class="btn focus" data-act="${state.leagueFile ? 'download' : 'downloadLeague'}">💾 Download League File</button></fieldset>`}
       ${state.leagueFile ? '' : '<fieldset class="frame"><legend>Stats</legend><button class="btn" data-act="openLeaders" data-m="ratings">🏀 League Leaders</button></fieldset>'}`;
   }
-  layout({ title: view ? 'League' : 'League Editor', body: head + body });
+  layout({ title: view ? 'My League' : 'League Editor', body: head + body });
 };
 // The app's own read of a team next to the game's tag (its extra steps are Favorites and Selling).
 function appTier(t) {
