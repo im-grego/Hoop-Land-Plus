@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.316.1';
+const APP_VERSION = '0.316.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -12477,8 +12477,8 @@ screens.prospect = (args) => {
       </div>
       ${scoutBtn(p) ? `<div style="margin-bottom:8px">${scoutBtn(p)}</div>` : ''}
       ${uiTabs('prospect', [
-        ['over', 'Overview', `<fieldset class="frame"><legend>Scouting Report</legend>${scoutList(p)}</fieldset>${outlookBox(p)}
-      <fieldset class="frame"><legend>Player Comps</legend>${compRow('Ceiling', c.ceiling)}${compRow('Floor', c.floor)}</fieldset>`],
+        ['over', 'Overview', `<fieldset class="frame"><legend>Scouting Report</legend>${scoutList(p)}</fieldset>
+      <fieldset class="frame"><legend>Player Comps</legend>${compRow('Ceiling', c.ceiling)}${compRow('Floor', c.floor)}</fieldset>${outlookBox(p)}`],
         ['stats', 'Stats', collegeBox(p) || '<p class="note muted">No college stats on record.</p>'],
         ['game', 'Traits', `${traitsBox(p, true)}${scouted(p.id) || workoutDone(p.id) ? playStyleBox(p) : '<fieldset class="frame"><legend>Play Style</legend><p class="note small muted">Send a scout to see how he plays.</p></fieldset>'}`],
         ['work', 'Workout', `${workoutBox(p)}${revealBox(p)}${combineBox(p)}`],
