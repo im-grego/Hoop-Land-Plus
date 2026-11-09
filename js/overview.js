@@ -210,7 +210,8 @@ export function teamBooks(L, team, { level = levelOf, worth, qoEligible }) {
 export function leagueCuts(L, level) {
   const lv = L.teams.flatMap(t => t.roster.filter(p => p.status !== 4).map(level)).sort((a, b) => b - a);
   const n = L.teams.length;
-  return { starter: lv[n * 5 - 1] ?? 75, rotation: lv[n * 8 - 1] ?? 70 };
+  // A starter is a 3.5-star player: level 79 or better.
+  return { starter: 79, rotation: lv[n * 8 - 1] ?? 70 };
 }
 export function rosterNeeds(L, team, { level = levelOf, li = 0 } = {}) {
   const cuts = leagueCuts(L, level);

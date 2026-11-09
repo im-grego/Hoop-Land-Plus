@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.315.2';
+const APP_VERSION = '0.315.3';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -11093,7 +11093,7 @@ function looksCard() {
     <p class="note small grow">${done ? `✓ ${done.length} prospects restyled to match your league.` : 'Restyle the class to look and play like your league\'s players.'}</p>
     ${done ? '<button class="btn small off" data-act="looksUndo">↺ Undo</button>' : '<button class="btn small focus" data-act="looksMatch">Match My League</button>'}
   </div><div class="row" style="margin-top:8px">
-    <p class="note small grow">${named ? `✓ ${named.length} prospects renamed.` : 'Give the class new names that fit where each player is from. No repeats.'}</p>
+    <p class="note small grow">${named ? `✓ ${named.length} prospects renamed.` : 'Give the class new names that fit where each player is from.'}</p>
     ${named ? '<button class="btn small off" data-act="namesUndo">↺ Undo</button>' : '<button class="btn small focus" data-act="namesMake">Generate Names</button>'}
   </div></fieldset>`;
 }
@@ -11247,7 +11247,7 @@ screens.capital = (args = {}) => {
   const notes = pickNotes();
   const realWhy = (yr, rd, from, to) => {
     const app = notes[`${from}:${yr}:${rd}`];
-    const n = app && app.to === to ? app.text : RP.tradeNote(L, yr, rd, team(from), team(to));
+    const n = app && app.to === to ? app.text : gamePickTrade(L, from, yr, rd, to) || RP.tradeNote(L, yr, rd, team(from), team(to));
     return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p>${esc(n)}.</p>`, 'Pick Info')}` : '';
   };
   let held1 = 0, held2 = 0, out = 0, total = 0;
@@ -13087,6 +13087,23 @@ const offKey = name => `hlc:${name}:${saveTag()}:${seasonKey()}`;
 function offGet(name) { try { return JSON.parse(localStorage.getItem(offKey(name))) || {}; } catch { return {}; } }
 function offSet(name, v) { try { localStorage.setItem(offKey(name), JSON.stringify(v)); } catch { /* ignore */ } }
 // Every player trade this offseason, in order: { pid, from, to } by team id.
+// A trade made in Hoop Land itself, from the season's news: the latest one that sent this pick to this team.
+function gamePickTrade(L, otid, yr, rd, to) {
+  const nm = id => L.teams.find(t => t.id === id)?.shortName || '?';
+  const news = (L.season.news || []).filter(x => x.type === 7 && x.data?.trade?.status === 1 && x.data.trade.teams?.length);
+  // Exact year first; then a year off (a file whose pick years the app has put right since the trade).
+  for (const off of [0, 1, -1]) for (const x of [...news].reverse()) {
+    const sides = x.data.trade.teams;
+    const from = sides.find(sd => (sd.assets || []).some(a => a.tid === to && a.draftPick?.rd === rd && a.draftPick.otid === otid && a.draftPick.yr + off === yr));
+    if (!from) continue;
+    const got = sides.filter(sd => sd !== from).flatMap(sd => (sd.assets || []).filter(a => a.tid === from.tid));
+    const ps = got.filter(a => a.pid).map(a => findPlayer(a.pid)?.p).filter(Boolean).sort((a, b) => shownLevel(b) - shownLevel(a)).map(p => playerName(p));
+    const pks = got.filter(a => a.draftPick?.rd > 0).length;
+    const back = [...ps.slice(0, 2), ps.length > 2 ? `${ps.length - 2} more` : '', pks ? `${pks} pick${pks > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ') || 'nothing back';
+    return `${nm(from.tid)} traded it to ${nm(to)} for ${back} (in Hoop Land, this season)`;
+  }
+  return '';
+}
 const pickNoteKey = () => `hlc:picknotes:${saveTag()}`;
 const pickNotes = () => { try { return JSON.parse(localStorage.getItem(pickNoteKey())) || {}; } catch { return {}; } };
 const pickKey = pk => `${pk.otid}:${pk.yr}:${pk.rd}`;
