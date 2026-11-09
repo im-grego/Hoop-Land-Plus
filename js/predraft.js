@@ -41,8 +41,8 @@ export const DRILLS = [
 // All-time combine norms (mean, spread) for percentiles: a result is graded against every prospect who has ever
 // tested, not just this class, so a class's best are in the 90s and only a true outlier hits the 99th.
 export const NORMS = {
-  lane: [11.3, 0.5], shuttle: [3.04, 0.15], sprint: [3.33, 0.17], standVert: [29.4, 3.1], maxVert: [37.2, 3.2], bench: [7.5, 5],
-  dribble: [18, 4], spot: [16.4, 3.6], star3: [13.9, 3.7], side3: [15, 3.6], starMid: [15.6, 3], sideMid: [16.6, 3.1], ft: [7.4, 1.1],
+  lane: [11.25, 0.45], shuttle: [3.02, 0.18], sprint: [3.27, 0.12], standVert: [29.3, 3.0], maxVert: [35.2, 3.1], bench: [9, 5.3],
+  dribble: [17, 3.0], spot: [13.5, 2.7], star3: [11.5, 2.6], side3: [12.5, 2.7], starMid: [9.5, 1.65], sideMid: [9.2, 1.4], ft: [7.2, 1.15],
   threes: [45.3, 9.5], mid: [32.2, 5.1], total: [102.9, 16.8],
 };
 // Normal CDF (Abramowitz-Stegun), 0-1.
@@ -85,6 +85,28 @@ export function medicalFlag(p) {
   return { level: 'note', text: `${injuryName(list[list.length - 1])} in college`, list };
 }
 
+// Calibration, measured by running the combine over every class on hand many times: [raw mean, raw spread]. A raw
+// result maps onto the all-time scale in NORMS (a player's attributes still decide where he lands), so a class's best
+// sits in the 90s and the top of a leaderboard is rare. RECORDS are the all-time combine bests: the ceiling (or floor,
+// for timed drills and body fat), reached maybe once in a few dozen drafts.
+const RAW = {
+  lane: [11.46, 0.56], shuttle: [3.085, 0.15], sprint: [3.392, 0.202], standVert: [27.52, 3.09], maxVert: [35.43, 3.34], bench: [8.03, 7.22],
+  dribble: [15.32, 4.1], spot: [13.46, 3.93], star3: [11.02, 3.95], side3: [12.27, 3.98], starMid: [13.5, 3.51], sideMid: [14.19, 3.48], ft: [6.59, 1.19],
+  fat: [7.19, 1.72], handL: [8.7, 0.44], handW: [9.74, 0.62],
+};
+const BODY = { fat: [7.4, 1.5], handL: [8.75, 0.45], handW: [9.6, 0.6] };
+export const RECORDS = {
+  lane: 9.65, shuttle: 2.22, sprint: 2.87, maxVert: 48, standVert: 41.5, bench: 27,
+  spot: 22, dribble: 28, star3: 21, side3: 23, starMid: 16, sideMid: 16, ft: 10,
+  fat: 2.6, handL: 10.5, handW: 12, ws: 98.25, reach: 122.5, htShoes: 91, htNs: 89.25, wt: 334,
+};
+const LOWER = new Set(['lane', 'shuttle', 'sprint', 'fat']);
+function calib(k, v) {
+  const r = RAW[k], t = NORMS[k] || BODY[k];
+  if (!r || !t || v == null) return v;
+  const out = t[0] + (v - r[0]) / r[1] * t[1], rec = RECORDS[k];
+  return rec == null ? out : LOWER.has(k) ? Math.max(rec, out) : Math.min(rec, out);
+}
 // One prospect's combine.
 function testPlayer(p, salt, skipAth) {
   const r = rngFor(salt, p.id, 7);
@@ -106,7 +128,7 @@ function testPlayer(p, salt, skipAth) {
   ath.standVert = ath.maxVert * 0.79 - 0.5 + g() * 1.6;
   ath.bench = Math.max(0, Math.round(3 + (STR - 8) * 1.45 + (wt - 205) * 0.05 + g() * 3));
   // Makes out of n: a make rate from the rating, with spread that scales with the attempts.
-  const shot = (n, base, per, rating, sd) => clamp(Math.round(n * clamp(base + rating * per, 0, 1) + g() * sd * n / 25), 0, n);
+  const shot = (n, base, per, rating, sd) => n * clamp(base + rating * per, 0, 1) + g() * sd * n / 25;
   const shoot = {
     spot: shot(25, 0.25, 0.03, A(p, 'TPT'), 2.4),
     dribble: shot(30, 0.22, 0.031, A(p, 'MID') * 0.6 + A(p, 'DRB') * 0.4, 2.4),
@@ -115,7 +137,7 @@ function testPlayer(p, salt, skipAth) {
   };
   // The rest of the measurements and drills draw from their own stream, so the ones above keep their values.
   const r2 = rngFor(salt, p.id, 11), g2 = () => gauss(r2);
-  const shot2 = (n, base, per, rating, sd) => clamp(Math.round(n * clamp(base + rating * per, 0, 1) + g2() * sd * n / 25), 0, n);
+  const shot2 = (n, base, per, rating, sd) => n * clamp(base + rating * per, 0, 1) + g2() * sd * n / 25;
   Object.assign(shoot, {
     star3: shot2(25, 0.15, 0.03, A(p, 'TPT'), 2.4),
     side3: shot2(25, 0.2, 0.03, A(p, 'TPT'), 2.4),
@@ -124,11 +146,17 @@ function testPlayer(p, salt, skipAth) {
   });
   res.htShoes = q(htNs + 1.25 + g2() * 0.15);
   // Hands: length and width grow with height; big hands help rebounding and finishing.
-  res.handL = q(clamp(8.65 + (ht - 78) * 0.07 + ((A(p, 'DRE') + A(p, 'ORE')) / 2 - 9) * 0.03 + g2() * 0.3, 7.75, 10));
-  res.handW = q(clamp(9.55 + (ht - 78) * 0.09 + (A(p, 'STR') - 9) * 0.04 + g2() * 0.45, 8.25, 11.25));
+  res.handL = q(clamp(calib('handL', 8.65 + (ht - 78) * 0.07 + ((A(p, 'DRE') + A(p, 'ORE')) / 2 - 9) * 0.03 + g2() * 0.3), 7.5, RECORDS.handL));
+  res.handW = q(clamp(calib('handW', 9.55 + (ht - 78) * 0.09 + (A(p, 'STR') - 9) * 0.04 + g2() * 0.45), 8, RECORDS.handW));
   // Body fat: heavy for his height and slow raise it.
   const wtFor = 205 + (ht - 78) * 7.5;
-  res.fat = +clamp(9.2 + (wt - wtFor) * 0.045 - (A(p, 'SPD') - 9) * 0.18 - (A(p, 'STM') - 9) * 0.1 + g2() * 1.5, 3.8, 16).toFixed(1);
+  res.fat = +clamp(calib('fat', 9.2 + (wt - wtFor) * 0.045 - (A(p, 'SPD') - 9) * 0.18 - (A(p, 'STM') - 9) * 0.1 + g2() * 1.5), RECORDS.fat, 16).toFixed(1);
+  // Bench: below average it scales down from zero (a player who can't lift it still posts 0); above, the calibration.
+  const rawBench = ath.bench;
+  for (const k of Object.keys(ath)) ath[k] = calib(k, ath[k]);
+  // Above average the reps climb slower than the raw spread: 20+ is rare, the record almost never.
+  ath.bench = Math.max(0, Math.round(rawBench <= RAW.bench[0] ? rawBench * NORMS.bench[0] / RAW.bench[0] : Math.min(RECORDS.bench, NORMS.bench[0] + (rawBench - RAW.bench[0]) / RAW.bench[1] * NORMS.bench[1] * 0.9)));
+  for (const d of DRILLS.filter(x => x.group === 'shoot')) shoot[d.k] = clamp(Math.round(calib(d.k, shoot[d.k])), 0, d.n);
   ath.sprint = +ath.sprint.toFixed(2); ath.lane = +ath.lane.toFixed(2); ath.shuttle = +ath.shuttle.toFixed(2);
   ath.maxVert = +ath.maxVert.toFixed(1); ath.standVert = +ath.standVert.toFixed(1);
   for (const k of Object.keys(ath)) res[k] = skipAth ? null : ath[k];
