@@ -1798,4 +1798,6 @@ a.btn { text-decoration: none; }
 /* Four or more tabs: tighter, so the draft's four still sit on one line. */
 .tabs:has(> .btn:nth-child(4)) { gap: 6px; }
 .tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) { flex-wrap: nowrap; }
-.tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) > .btn { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.1; font-size: 14px; padding-left: 4px; padding-right: 4px; }
+.tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) > .btn { flex: 1 1 auto; min-width: min-content; white-space: normal; overflow-wrap: normal; word-break: normal; line-height: 1.1; font-size: 14px; padding-left: 4px; padding-right: 4px; }
+.pros-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pros-chips .grade { margin: 0; }

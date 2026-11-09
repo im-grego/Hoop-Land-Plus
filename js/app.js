@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.0';
+const APP_VERSION = '0.317.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -12194,7 +12194,7 @@ screens.workouts = (args) => {
   const inviteRow = p => {
     const r = rank.get(p.id), fit = me && fillsFor(me, p).length;
     return `<div class="drill-row wk-row tap" data-act="openProspect" data-id="${p.id}">
-      <span class="grow"><b>${onBoard(p.id) ? '<span class="gold">★</span> ' : ''}${esc(playerName(p))}</b> ${valueChip(p)}${fit ? ' <span title="Fills a need">🧩</span>' : ''}${scouted(p.id) ? ' <span title="Scouted in person">🔎</span>' : ''}${state.params.readiness !== 'age' ? ` ${readyChip(p)}` : ''}<br>
+      <span class="grow"><b>${onBoard(p.id) ? '<span class="gold">★</span> ' : ''}${esc(playerName(p))}</b><br>
         <span class="small muted">#${r} consensus · ${esc(posName(p))} · ${p.age}y · ${heightStr(p.ht)}</span></span>
       <button class="btn small ${left ? 'focus' : 'off'}" data-act="invite" data-id="${p.id}" ${left ? '' : 'disabled'}>Bring In</button></div>`;
   };
@@ -12479,7 +12479,7 @@ screens.prospect = (args) => {
         <button class="mvbtn pros-add ${onBoard(p.id) ? 'on' : ''}" data-act="toggleBoard" data-id="${p.id}" aria-label="${onBoard(p.id) ? 'Remove from' : 'Add to'} your board">${onBoard(p.id) ? '✓' : '+'}</button>
         <h2 class="team-title">${esc(playerName(p))}</h2>
         <p class="note">${esc((c => !c ? 'Prospect' : c.made ? (/^Pro club/.test(c.team) ? c.team : 'College') : c.team)(collegeLine(p, state.data.seasonLeagues)))} · ${esc(posName(p))} · ${heightStr(p.ht)} · ${p.wt} lb</p>
-        <p class="note small"><span class="age-chip">Age ${p.age} · ${classYear(p)}</span> ${state.params.readiness === 'age' ? '' : readyChip(p)}</p>
+        <p class="note small pros-chips"><span class="age-chip">Age ${p.age} · ${classYear(p)}</span> ${valueChip(p)} ${state.params.readiness === 'age' ? '' : readyChip(p)}</p>
         ${(() => { const z = collegeZ(p), w = productionWord(z), b = bodyZ(p); if (!w && !b) return ''; const fw = b ? (b.frame >= 0.5 ? 'pro-ready frame' : b.frame <= -0.5 ? 'slight frame' : 'average frame') : ''; return `<p class="note small">${w ? `College production vs the ${p.pos <= 2 ? 'guards' : p.pos <= 5 ? 'wings' : 'bigs'} in his class: <b class="${z >= 0.5 ? 'up' : z <= -0.5 ? 'down' : ''}">${w}</b>` : ''}${w && fw ? ' · ' : ''}${fw ? `<span class="${b.frame >= 0.5 ? 'up' : b.frame <= -0.5 ? 'down' : 'muted'}">${fw}</span>` : ''}</p>`; })()}
         ${labStoryLine(p)}
       </div>
@@ -12503,7 +12503,7 @@ screens.prospect = (args) => {
           <div class="${barClass(k)}"><div class="room ${known ? '' : 'fuzzy'}" style="width:${(known ? ceil : hi) / ATTR_MAX * 100}%"></div>${known ? '' : `<div class="band" style="left:${lo / ATTR_MAX * 100}%;width:${(hi - lo) / ATTR_MAX * 100}%"></div>`}<div class="fill" style="width:${now / ATTR_MAX * 100}%"></div>${known ? `<div class="ceil" style="left:calc(${ceil / ATTR_MAX * 100}% - 2px)"></div>` : ''}</div>
         </div>`;
         }).join('')}
-        <p class="note muted small" style="margin-top:8px">The filled bar is today's rating. A gold number and the notch are his ceiling; a range (the shaded band) is as close as you can read it so far. Ranges tighten after Mock 1.0, with a scouting trip and at the combine (the athletic ones most), and a private workout shows every ceiling. A rating already at 20, and the physical ratings (no ceiling to grow into), are always exact.</p>
+        <p class="note muted small" style="margin-top:8px">The filled bar is today's rating. A gold number and the notch are his ceiling; a range (the shaded band) is as close as you can read it so far. Ranges tighten after Mock 1.0, with a scouting trip and at the combine (the athletic ones most), and a private workout shows every ceiling.</p>
       </fieldset>`]])}`,
   });
 };
