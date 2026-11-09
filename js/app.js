@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.4';
+const APP_VERSION = '0.317.5';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1985,7 +1985,7 @@ function stepActions(key) {
     case 'vote': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="vote">🗳️ Begin</button><button class="btn" data-act="voteSkip">⏭ Skip</button></div>`;
     case 'medical': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="medical">🩺 Begin</button><button class="btn" data-act="calDone" data-k="medical">⏭ Skip</button></div>`;
     case 'exhib': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="exhib">🏀 Begin</button><button class="btn" data-act="calDone" data-k="exhib">⏭ Skip</button></div>`;
-    case 'hof': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="hofClass">🏛️ Ceremony</button><button class="btn" data-act="calDone" data-k="hof">⏭ Skip</button></div>`;
+    case 'hof': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="hofClass">🏛️ View Class</button><button class="btn" data-act="calDone" data-k="hof">⏭ Skip</button></div>`;
     case 'office': return `<p class="note small">Your teams: <b>${esc(L.teams.filter(isUserTeam).map(t => `${t.city} ${t.name}`.trim()).join(', ') || 'none yet')}</b></p>
       <div class="grid2"><button class="btn" data-act="nav" data-to="teams">👥 Select Teams</button><button class="btn focus" data-act="calDone" data-k="office" ${L.teams.some(isUserTeam) ? '' : 'disabled'}>✅ Confirm</button></div>`;
     case 'overview': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="overview">📊 Begin</button><button class="btn" data-act="calDone" data-k="overview">⏭ Skip</button></div>`;
@@ -8948,7 +8948,7 @@ screens.hofClass = () => {
         const m = mainTeam(L, p);
         const retired = m?.t && (m.t.retiredNumbers || []).some(r => r.pid === p.id);
         return `<fieldset class="frame"><legend>${esc(playerName(p))}</legend>
-          <p class="note small">${esc(POSITIONS[p.pos] ?? '')} · peak <span class="gold">${levelOf(p)}</span> · ${avg(p, 'PTS')} / ${avg(p, 'REB')} / ${avg(p, 'AST')} over ${tot(p, 'GP')} games${titles(p) ? ` · 🏆 ${titles(p)}` : ''}</p>
+          <p class="note small">${esc(POSITIONS[p.pos] ?? '')} · peak <span class="gold">${levelOf(p)}</span> · ${avg(p, 'PTS')} / ${avg(p, 'REB')} / ${avg(p, 'AST')} over ${tot(p, 'GP')} games</p>
           ${m?.t ? `<p class="note small">Made his name with the ${esc(teamFull(m.t))} (${m.yrs} season${m.yrs > 1 ? 's' : ''}${m.num != null ? `, #${m.num === 100 ? '00' : m.num}` : ''}).${retired ? ' <span class="up">Number retired.</span>' : ''}</p>` : ''}
           <div class="grid2"><button class="btn small" data-act="openPlayer" data-id="${p.id}">🏛️ Profile</button>${m?.t && isUserTeam(m.t) && m.num != null && !retired ? `<button class="btn small focus" data-act="retireNum" data-id="${p.id}">🏟️ Retire #${m.num === 100 ? '00' : m.num}</button>` : ''}</div>
         </fieldset>`;
