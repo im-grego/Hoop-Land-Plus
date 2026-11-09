@@ -70,7 +70,9 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.322.2';
+const APP_VERSION = '0.322.4';
+// What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
+const SHOWN_VERSION = '0.1.0 Beta';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -642,7 +644,7 @@ function render() {
   try { screens[top.name](top.args); } catch (err) {
     console.error(err);
     layout({ title: 'Something Broke', body: `<p class="note">This screen (${esc(top.name)}) hit an error and couldn't draw. Everything else still works, and nothing was changed.</p>
-      <p class="note small muted">Send this to get it fixed:</p><pre class="note small" style="white-space:pre-wrap;user-select:text">${esc(`v${APP_VERSION} · ${top.name}\n${err?.message || err}\n${String(err?.stack || '').split('\n').slice(0, 6).join('\n')}`)}</pre>
+      <p class="note small muted">Send this to get it fixed:</p><pre class="note small" style="white-space:pre-wrap;user-select:text">${esc(`v${SHOWN_VERSION} (build ${APP_VERSION}) · ${top.name}\n${err?.message || err}\n${String(err?.stack || '').split('\n').slice(0, 6).join('\n')}`)}</pre>
       <button class="btn focus" data-act="goHomeCuts">🏠 Home</button>` });
   }
   let target = view === lastView ? y : top.y ?? 0;
@@ -783,6 +785,13 @@ async function loadFile(file) {
     state.leagueFile = false;
     if (!data.seasonLeagues && Array.isArray(data.teams) && data.season) { data = { seasonLeagues: [data] }; state.leagueFile = true; }
     if (!Array.isArray(data.seasonLeagues) || !data.seasonLeagues.length) throw new Error('No seasonLeagues found');
+    if (state.leagueFile && EDITOR_OFF()) {
+      o.remove(); state.leagueFile = false;
+      const go = await choiceBox('<b>The league editor is coming soon.</b><br>For now Hoop Land Plus runs <b>Franchise</b> saves. Join the Discord to hear when league files land.', [['discord', 'Join Discord', 'focus'], ['ok', 'OK', 'off']]);
+      if (go === 'discord') { countEvent('discord-join'); window.open(DISCORD, '_blank', 'noopener'); }
+      countEvent('blocked-leaguefile');
+      return;
+    }
     // The public app runs Franchise saves for now; the other modes come back once they're polished.
     if (!state.leagueFile && FRANCHISE_ONLY()) {
       const m = detectMode(data), L0 = data.seasonLeagues[m.li] || data.seasonLeagues[0];
@@ -2537,6 +2546,9 @@ function countHit(path, title = '', event = false) {
 }
 const countEvent = name => countHit(name, name, true);
 // Franchise-only gate: on the public site (the custom domain or the github.io address), not in local testing.
+// The league editor is paused on the public site (league files, the league-file export, and the editing controls in
+// League): EDITOR_OFF. Viewing stays. Local testing keeps everything.
+const EDITOR_OFF = () => FRANCHISE_ONLY();
 const FRANCHISE_ONLY = () => counting() || (/\.github\.io$/.test(location.hostname) && /^\/hoop-land-plus/i.test(location.pathname));
 countHit(runningInstalled() ? '/app' : '/', runningInstalled() ? 'Opened (installed app)' : 'Opened (browser)');
 
@@ -2555,7 +2567,7 @@ function deviceLine() {
   return `${dev} · ${br} · ${runningInstalled() ? 'installed app' : 'browser'}`;
 }
 function bugReportText() {
-  const lines = ['**Hoop Land Plus bug report**', `Version: ${APP_VERSION}`, `Device: ${deviceLine()}`];
+  const lines = ['**Hoop Land Plus bug report**', `Version: ${SHOWN_VERSION} (build ${APP_VERSION})`, `Device: ${deviceLine()}`];
   try {
     if (state.data) {
       const L = league(), s = L.season;
@@ -2578,6 +2590,32 @@ function communityRow() {
     </div>`;
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-count="discord-join"]')) countEvent('discord-join'); });
+// The roadmap: what's here, what's next, what's further out.
+const roadmapBtn = () => '<button class="btn left full roadmap-btn" data-act="nav" data-to="roadmap"><span class="ico">🗺️</span> Roadmap: What\'s Coming</button>';
+const ROADMAP = [
+  ['✅ In the beta now', 'up', [
+    ['The full offseason', 'Lottery, scouting, the draft, contracts, free agency, trades, training camp and final cuts, for Franchise saves.'],
+  ]],
+  ['🔜 Coming soon', 'gold', [
+    ['In-season mode', 'Check-ins during the regular season: trades, G League call-ups, morale and the deadline.'],
+    ['All-Star break check-in', 'All-Star weekend, mid-season awards races and a look at where your season stands.'],
+    ['Playoff check-in', 'The bracket, title odds, a scouting report on your opponent and playoff risers.'],
+  ]],
+  ['🔭 Further down the line', '', [
+    ['College offseason', 'Recruiting, the transfer portal, NIL and the coaching carousel for College saves.'],
+    ['Career mode', 'Your player\'s own offseason: an agent, free agency offers, goals and a legacy.'],
+    ['Full league editor', 'Edit teams, players, picks, coaches and the Hall of Fame in a league file, then export it.'],
+  ]],
+];
+screens.roadmap = () => {
+  countEvent('roadmap');
+  layout({
+    title: 'Roadmap',
+    body: `<p class="note">Hoop Land Plus is just getting started. Here's what's next. Ideas and feedback go in the Discord.</p>
+      ${ROADMAP.map(([h, cls, items]) => `<fieldset class="frame"><legend>${h}</legend><div class="stack">${items.map(([t, d]) => `<p class="note small" style="margin:0"><b class="${cls}">${esc(t)}</b><br>${esc(d)}</p>`).join('')}</div></fieldset>`).join('')}
+      ${communityRow()}`,
+  });
+};
 actions.bugReport = () => {
   const text = bugReportText();
   const o = overlay(`<p class="note"><b>Report a bug</b></p>
@@ -2655,7 +2693,8 @@ screens.main = () => {
         </fieldset>
         <div id="installSlot">${installCard()}</div>
         ${communityRow()}
-        <div class="ver-badge">Version ${APP_VERSION}</div>`,
+        ${roadmapBtn()}
+        <div class="ver-badge">Version ${SHOWN_VERSION}</div>`,
     });
     return;
   }
@@ -2694,7 +2733,8 @@ screens.main = () => {
         <button class="btn left" data-act="nav" data-to="export"><span class="ico">💾</span> Export</button>
       </div>
       ${communityRow()}
-      <div class="ver-badge">Version ${APP_VERSION}</div>`,
+      ${roadmapBtn()}
+      <div class="ver-badge">Version ${SHOWN_VERSION}</div>`,
   });
 };
 
@@ -19694,7 +19734,7 @@ screens.export = () => {
         ${mindNudgeLine()}
         ${isCollege() ? '' : `<p class="note muted small">🧬 Traits stay on this device${dropboxConnected() ? ' and sync to Dropbox with this export' : ''}. <button class="btn tiny" data-act="traitsDownload">⬇ Traits File</button></p>`}
       </fieldset>
-      ${isCollege() ? '' : `<fieldset class="frame"><legend>League File (experimental)</legend>
+      ${isCollege() || EDITOR_OFF() ? '' : `<fieldset class="frame"><legend>League File (experimental)</legend>
         <p class="note small">Turns this save into a league file: rosters, contracts, ratings, tendencies, coaches, picks and history as they stand, with the season reset so you can start a brand new franchise from it.</p>
         <button class="btn" data-act="downloadLeague">🌐 Download League File</button></fieldset>`}
       ${inArtifact() ? '' : dropboxFrame()}`],
@@ -19835,7 +19875,9 @@ const edSeg = (opts, cur, act, data) => `<div class="tabs fa-tabs">${opts.map(([
 screens.editor = (args = {}) => {
   const L = league();
   const tab = args.tab || 'teams';
-  const tabs = [['teams', 'Teams'], ['picks', 'Picks'], ['coaches', 'Coaches'], ...(isCollege() || !(L.hallOfFame || []).length ? [] : [['hof', 'Hall of Fame']]), ['tools', 'Tools']];
+  const view = EDITOR_OFF();
+  const tabs = [['teams', 'Teams'], ...(view ? [] : [['picks', 'Picks'], ['coaches', 'Coaches']]), ...(isCollege() || !(L.hallOfFame || []).length ? [] : [['hof', 'Hall of Fame']]), ['tools', 'Tools']];
+  if (view && !tabs.some(([k]) => k === tab)) { replace('editor', { tab: 'teams' }); return; }
   const head = `<p class="note small">${esc(L.leagueName || L.shortName)} · ${state.leagueFile ? 'league file' : 'your save'} · ${L.teams.length} teams. ${state.leagueFile ? 'Edits are written into the file when you export.' : 'Edits change your save; Export League snapshots it.'}</p>
     <div class="tabs">${tabs.map(([k, l]) => `<button class="btn ${k === tab ? 'on focus' : 'off'}" data-act="edTab" data-t="${k}">${l}</button>`).join('')}</div>`;
   let body = '';
@@ -19846,16 +19888,16 @@ screens.editor = (args = {}) => {
     } else {
       const ro = [...t.roster].sort((a, b) => levelOf(b) - levelOf(a));
       body = `<button class="btn small off" data-act="edTeam" data-id="">◀ All teams</button>
-        <fieldset class="frame"><legend>${esc(t.city)} ${esc(t.name)}</legend>
+        ${view ? '' : `<fieldset class="frame"><legend>${esc(t.city)} ${esc(t.name)}</legend>
           ${edStep('Fans', t.frontOffice?.fans ?? 0, 'edFans', `data-id="${t.id}"`, '0–100')}
           ${t.frontOffice ? edStep('Coins', t.frontOffice.coins ?? 0, 'edCoins', `data-id="${t.id}"`, '±50') : ''}
           ${FX.FACILITIES.map(f => edStep(`${f.icon} ${esc(f.label)}`, FX.tierIn(t, f.k), 'edFac', `data-id="${t.id}" data-k="${f.k}"`, 'tier 1–4')).join('')}
           <p class="note small" style="margin-top:6px">Team tag (the game's)</p>
           ${edSeg(ED_TAGS.map((n, i) => [i, n]), t.status ?? 0, 'edTag', `data-id="${t.id}"`)}
           <p class="note small muted">The app reads it as ${esc(appTier(t))}.</p>
-        </fieldset>
+        </fieldset>`}
         <fieldset class="frame"><legend>Roster · trade block</legend><div class="stack">${ro.map(p => `<div class="drill-row wrap">
-          <span class="grow"><button class="linkish" data-act="edPlayer" data-id="${p.id}">${esc(playerName(p))}</button> ${lvTag(p)} <span class="small muted">${esc(posName(p))} · ${p.age}y</span></span>
+          <span class="grow"><button class="linkish" data-act="${view ? 'openPlayer' : 'edPlayer'}" data-id="${p.id}">${esc(playerName(p))}</button> ${lvTag(p)} <span class="small muted">${esc(posName(p))} · ${p.age}y</span></span>
           <span class="full">${edSeg([[0, 'No'], [1, 'On the block'], [2, 'Untouchable']], p.season?.onTradeBlock ?? 0, 'edBlock', `data-id="${p.id}"`)}</span></div>`).join('')}</div></fieldset>`;
     }
   } else if (tab === 'picks') {
@@ -19891,14 +19933,14 @@ screens.editor = (args = {}) => {
     body = `<p class="note small">Each coach's three skill-tree levels (current and max): Development, Motivation (culture) and Leadership (scheme).</p>${[...staffs, ...pool].map(row).join('')}`;
   } else {
     const missing = edPlayers(L).filter(p => !p.traits || !Object.values(p.traits).some(v => v > 0)).length;
-    body = `<fieldset class="frame"><legend>Traits</legend><p class="note small">${missing} players have no traits set. Open a player from a team's roster to edit his, or fill the empty ones with the app's judgments (real careers for known players, generated for the rest).</p>
-      <button class="btn" data-act="edFillTraits">Fill Empty Traits</button></fieldset>
+    body = `${view ? '' : `<fieldset class="frame"><legend>Traits</legend><p class="note small">${missing} players have no traits set. Open a player from a team's roster to edit his, or fill the empty ones with the app's judgments (real careers for known players, generated for the rest).</p>
+      <button class="btn" data-act="edFillTraits">Fill Empty Traits</button></fieldset>`}
       ${!isCollege() ? `<fieldset class="frame"><legend>Draft Class</legend><p class="note small">${league().draftClass?.length && phaseRank(league().season) < 3 ? 'Read the class the game made, or build your own: strength, stars, depth, flavor, sleepers, storylines, a headliner you design.' : 'Plan next year\'s class now: it goes in when that pre-draft file is loaded.'}</p><button class="btn" data-act="nav" data-to="classLab">🧪 Draft Class Lab</button></fieldset>` : ''}
-      ${realignBox(L)}
-      <fieldset class="frame"><legend>Export</legend><p class="note small">Writes the league file with your edits. Start a new save from it in the game.</p><button class="btn focus" data-act="${state.leagueFile ? 'download' : 'downloadLeague'}">💾 Download League File</button></fieldset>
+      ${view ? '' : realignBox(L)}
+      ${view ? '' : `<fieldset class="frame"><legend>Export</legend><p class="note small">Writes the league file with your edits. Start a new save from it in the game.</p><button class="btn focus" data-act="${state.leagueFile ? 'download' : 'downloadLeague'}">💾 Download League File</button></fieldset>`}
       ${state.leagueFile ? '' : '<fieldset class="frame"><legend>Stats</legend><button class="btn" data-act="openLeaders" data-m="ratings">🏀 League Leaders</button></fieldset>'}`;
   }
-  layout({ title: 'League Editor', body: head + body });
+  layout({ title: view ? 'League' : 'League Editor', body: head + body });
 };
 // The app's own read of a team next to the game's tag (its extra steps are Favorites and Selling).
 function appTier(t) {
@@ -19912,17 +19954,17 @@ $app.addEventListener('change', e => {
   replace('editor', { tab: 'hof' });
 });
 actions.edTeam = d => replace('editor', { tab: 'teams', tid: d.id === '' ? undefined : +d.id });
-actions.edFans = d => { const t = league().teams.find(x => x.id === +d.id); t.frontOffice.fans = Math.max(0, Math.min(100, (t.frontOffice.fans ?? 0) + 5 * +d.d)); state.dirty = true; render(); };
-actions.edTag = d => { const t = league().teams.find(x => x.id === +d.id); t.status = +d.v; state.dirty = true; render(); };
-actions.edCoins = d => { const t = league().teams.find(x => x.id === +d.id); t.frontOffice.coins = Math.max(0, (t.frontOffice.coins ?? 0) + 50 * +d.d); state.dirty = true; render(); };
-actions.edFac = d => {
+actions.edFans = d => { if (EDITOR_OFF()) return; const t = league().teams.find(x => x.id === +d.id); t.frontOffice.fans = Math.max(0, Math.min(100, (t.frontOffice.fans ?? 0) + 5 * +d.d)); state.dirty = true; render(); };
+actions.edTag = d => { if (EDITOR_OFF()) return; const t = league().teams.find(x => x.id === +d.id); t.status = +d.v; state.dirty = true; render(); };
+actions.edCoins = d => { if (EDITOR_OFF()) return; const t = league().teams.find(x => x.id === +d.id); t.frontOffice.coins = Math.max(0, (t.frontOffice.coins ?? 0) + 50 * +d.d); state.dirty = true; render(); };
+actions.edFac = d => { if (EDITOR_OFF()) return;
   const t = league().teams.find(x => x.id === +d.id), fac = FX.facilityOf(t, d.k);
   if (!fac) { toast('No such building on this team', '', 2400, true); return; }
   fac.tier = Math.max(1, Math.min(FX.MAX_FAC_TIER, FX.tierIn(t, d.k) + +d.d));
   state.dirty = true; render();
 };
 actions.edBlock = d => { const p = edPlayers(league()).find(x => x.id === +d.id); if (p?.season) { p.season.onTradeBlock = +d.v; state.dirty = true; render(); } };
-actions.edPlayer = d => {
+actions.edPlayer = d => { if (EDITOR_OFF()) return;
   const L = league(), p = edPlayers(L).find(x => x.id === +d.id);
   if (!p) return;
   p.traits ||= {};
@@ -19951,8 +19993,8 @@ actions.edPlayer = d => {
   });
   paint();
 };
-actions.edFillTraits = () => { const n = fillTraits(league()); state.dirty = true; toast(`Traits set for ${n} players`); render(); };
-actions.edCoach = d => {
+actions.edFillTraits = () => { if (EDITOR_OFF()) return; const n = fillTraits(league()); state.dirty = true; toast(`Traits set for ${n} players`); render(); };
+actions.edCoach = d => { if (EDITOR_OFF()) return;
   const c = [...league().teams.flatMap(t => t.frontOffice?.staff || []), ...(league().coaches || [])].find(x => x.id === +d.id);
   if (!c) return;
   const a = c.attributes[d.k], w = +d.w;
@@ -19969,7 +20011,7 @@ function pickHolder(L, orig, yr, rd) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset?.act === 'edPickTeam') replace('editor', { tab: 'picks', tid: +el.value });
-  if (el.dataset?.act === 'edPickTo' && el.value) {
+  if (el.dataset?.act === 'edPickTo' && el.value && !EDITOR_OFF()) {
     const L = league(), orig = +el.dataset.tid, yr = +el.dataset.yr, rd = +el.dataset.rd;
     const from = pickHolder(L, orig, yr, rd), to = L.teams.find(x => x.id === +el.value);
     const pk = from.draftPicks.find(x => x.yr === yr && x.rd === rd && x.otid === orig);
