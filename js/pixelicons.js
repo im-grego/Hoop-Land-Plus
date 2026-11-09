@@ -120,7 +120,7 @@ const MAP = {
   // The rest, each matched to the closest icon in the set.
   '🗳': 'note', '⬜': 'ice', '◻': 'ice', '💡': 'star', '🏫': 'cap', '🏕': 'tree', '🪙': 'money', '🖐': 'no', '🤚': 'warn',
   '🎠': 'trade', '🌙': 'clock', '⌛': 'clock', '😊': 'smile', '😠': 'angry', '🧳': 'plane', '🍑': 'trophy', '🌊': 'pin',
-  '🌽': 'pin', '🌅': 'pin',
+  '🌽': 'pin', '🌅': 'pin', '🔜': 'skip', '🗓': 'calendar',
 };
 // One SVG per icon (a rect per run of filled pixels), as CSS masks.
 function svg(rows) {
