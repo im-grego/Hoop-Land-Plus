@@ -1828,3 +1828,5 @@ a.btn { text-decoration: none; }
 .team-mini .mini-box { min-height: 0; padding: 8px 10px; line-height: 1.25; text-align: left; }
 .dl-steps { margin: 8px 0 4px; padding-left: 20px; }
 .dl-steps li { margin: 2px 0; }
+.community .ver-badge, .community .roadmap-btn { align-self: stretch; min-height: 100%; }
+.community .ver-badge { padding-top: 0; padding-bottom: 0; }

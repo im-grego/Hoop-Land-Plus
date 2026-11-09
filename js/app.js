@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.324.0';
+const APP_VERSION = '0.324.1';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.1.0';
 const $app = document.getElementById('app');
@@ -14929,7 +14929,7 @@ function meetingResultsBox() {
   if (!list) return '';
   const L = league(), find = id => L.teams.flatMap(t => t.roster).find(p => p.id === id);
   const rows = list.map(x => ({ x, p: find(x.pid) })).filter(r => r.p);
-  return `<fieldset class="frame"><legend>🗣️ Team Meeting Results</legend><div class="stack">
+  return `<fieldset class="frame"><legend>🗣️ Team Meeting Results</legend>${infoBtn('meetres', '<p class="small"><b>Why players moved</b>: each player\'s habits step toward what his ratings support (a good shooter shoots more, a weak one less), leaned toward your coach\'s scheme. A coach with higher Leadership pulls harder toward his system.</p><p class="small">Traits move too: Leadership shapes the standard-setting ones, Motivation the drive ones. A strong coach lifts them; a weak one can let them slip.</p><p class="small muted">How much a player takes in depends on his motor, his locker-room trait, his age and the coach\'s Development. A habit moves at most a few points from where the offseason started.</p>', 'Team Meeting')}<div class="stack">
     <p class="note">${rows.length ? `<b>${rows.length}</b> player${rows.length > 1 ? 's' : ''} shifted.` : 'Nobody moved this time.'}</p>
     ${rows.map(({ x, p }) => `<div class="pq"><p class="note small" style="margin:0"><b>${esc(playerName(p))}</b> <span class="gold">Lv ${shownLevel(p)}</span></p>
       <p class="note small pq-fx">${[...x.tend.map(([k, d]) => `<span class="${d > 0 ? 'up' : 'down'}">${esc(TEND_LABELS[k] || k)} ${sgn(d)}</span>`),
@@ -15736,7 +15736,7 @@ screens.survey = (args) => {
       ${mediaTabs('survey')}
       <div class="sv-tabs">${tabs.map(t => `<button class="btn ${t === tab ? 'on focus' : 'off'}" data-act="surveyTab" data-t="${t}">${SURVEY_LABEL[t]}</button>`).join('')}</div>
       ${body}`,
-    action: isStep('media') ? { act: 'mediaTab', k: 'mediaRumors', label: 'Next: Rumors' } : null,
+    action: isStep('media') ? { act: 'mediaDone', label: 'Wrap Up Media Day' } : null,
   });
 };
 actions.surveyTab = d => replace('survey', { tab: d.t });
@@ -16676,7 +16676,7 @@ screens.storylines = () => {
           <div><b>${s.icon} ${esc(s.title)}</b><p class="note small">${esc(s.text)}</p></div>
         </li>`).join('')}</ol>` : '<p class="note">Nothing to report yet.</p>'}
 `,
-    action: isStep('media') ? { act: 'mediaTab', k: 'survey', label: 'Next: GM Survey' } : null,
+    action: isStep('media') ? { act: 'mediaDone', label: 'Wrap Up Media Day' } : null,
   });
 };
 // Tab 3: what's trending on Hoop Gram this summer.
@@ -19055,7 +19055,7 @@ function stashList() { try { return JSON.parse(localStorage.getItem(stashKey()))
 function stashSave(v) { try { localStorage.setItem(stashKey(), JSON.stringify(v)); } catch { toast('Couldn\'t save the G League list', 'Browser storage is full', 3000, true); } }
 const STASH_MAX = 3;
 const proSeasons = p => (p.stats || []).filter(x => x.league === state.leagueIdx && x.yr < league().season.currentYear && (x.season || []).some(r => r.GP > 0)).length;
-const stashable = p => p.status === FA.STATUS_SIGNED && (p.contract?.yrs || 0) >= 2 && proSeasons(p) <= 1;
+const stashable = p => p.status === FA.STATUS_SIGNED && (p.contract?.yrs || 0) >= 2 && proSeasons(p) <= 1 && p.age <= 23;
 // Development points for a year down there: youth first, then pedigree, college production and frame.
 function stashPts(p) {
   const age = p.age <= 19 ? 5 : p.age <= 20 ? 4 : p.age <= 21 ? 3 : p.age <= 22 ? 2 : 1;
@@ -19069,7 +19069,7 @@ function stashBox(t) {
   const room = !done && away.length < STASH_MAX;
   const ok = room ? FA.signedRoster(t).filter(stashable).sort((a, b) => a.age - b.age || shownLevel(b) - shownLevel(a)) : [];
   if (!away.length && !ok.length) return '';
-  return `<fieldset class="frame"><legend>G League · ${away.length}/${STASH_MAX}</legend>${infoBtn('stash', '<p class="small"><b>The G League</b>: send a young player down for the season instead of cutting him. He comes off your roster (and out of the game), and the app keeps him.</p><p class="small">He\'s back on your team when the next offseason file comes in, a year older and better. Younger players, higher picks, productive college players and players with a frame to fill out grow the most. At the Contracts step you decide: keep him or let him go.</p><p class="small muted">Up to ' + STASH_MAX + '. Under contract at least two more years, with 0 or 1 seasons in the league.</p>')}<div class="stack">
+  return `<fieldset class="frame"><legend>G League · ${away.length}/${STASH_MAX}</legend>${infoBtn('stash', '<p class="small"><b>The G League</b>: send a young player down for the season instead of cutting him. He comes off your roster (and out of the game), and the app keeps him.</p><p class="small">He\'s back on your team when the next offseason file comes in, a year older and better. Younger players, higher picks, productive college players and players with a frame to fill out grow the most. At the Contracts step you decide: keep him or let him go.</p><p class="small muted">Up to ' + STASH_MAX + '. Under contract at least two more years, 23 or younger, with 0 or 1 seasons in the league.</p>')}<div class="stack">
     ${!done ? `<p class="note small muted">Send a player down to clear a roster spot instead of cutting him.</p>` : ''}
     ${away.map(x => `<div class="drill-row"><span class="grow"><b>${esc(playerName(x.player))}</b> <span class="gold">Lv ${levelOf(x.player)}</span><br><span class="small muted">${esc(posName(x.player))} · ${x.player.age}y · in the G League this season</span></span>${done ? '' : `<button class="btn small off" data-act="stashUndo" data-id="${x.player.id}">↺ Bring back</button>`}</div>`).join('')}
     ${ok.map(p => `<div class="drill-row"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)} ${potStars(p)}<br><span class="small muted">${esc(posName(p))} · ${p.age}y · ${proSeasons(p) ? '2nd year' : 'rookie'} · $${p.contract?.sal || 0}M × ${p.contract?.yrs || 0}</span></span><button class="btn small" data-act="stashSend" data-id="${p.id}">⬇️ Send down</button></div>`).join('')}
@@ -19475,7 +19475,7 @@ screens.latefa = (args = {}) => {
   const log = calFlags().lateLog;
   layout({
     title: 'Camp Deals',
-    body: `<p class="note small">Roster Finalization, part 1: last call before final cuts. Everyone left takes a one-year minimum now, a camp deal with nothing owed if he's cut. Teams at the top of the cap move overpaid veterans to rebuilders (paying in picks), and every CPU team fills to 15 unless the next signing would put it into another tax bracket.</p>
+    body: `<p class="note small">Last call before final cuts: anyone left signs a one-year minimum, with nothing owed if he's cut.</p>
       ${mine.map(t => `<fieldset class="frame"><legend>${esc(t.shortName)} · ${FA.signedRoster(t).length}/${O.rosterMax}</legend>${capBar(t)}</fieldset>`).join('')}
       ${done && log ? `<fieldset class="frame"><legend>Around the League</legend><div class="stack">${(calFlags().dumpLog || []).map(x => `<p class="note small">🔁 ${esc(x)}</p>`).join('')}${log.list.map(x => `<p class="note small"><b>${esc(x.name)}</b> ${esc(x.lv)} → ${esc(x.team)} · $${x.sal}M × ${x.yrs}</p>`).join('') || '<p class="note small muted">Nobody else signed.</p>'}</div></fieldset>` : ''}
       <div class="tabs fa-tabs">${[['all', 'Best'], ['young', 'Young'], ['vets', 'Vets']].map(([k, l]) => `<button class="btn ${k === view ? 'on focus' : 'off'}" data-act="lateView" data-v="${k}">${l}</button>`).join('')}</div>
