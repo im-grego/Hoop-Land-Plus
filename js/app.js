@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.318.2';
+const APP_VERSION = '0.319.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -11335,12 +11335,30 @@ const prospectRow = (p, extra = '', { mine = false } = {}) => {
 </button>`;
 };
 
+// Filters shared by Prospects and My Board (the same ones Private Workouts uses): a list, and a position group.
+const BOARD_FILTERS = [['board', '★ Board'], ['needs', '🧩 Needs'], ['scouted', '🔎 Scouted'], ['all', 'All']];
+const boardF = () => ({ f: 'all', pos: 'all', ...(state.boardF || {}) });
+function boardFilterOk(p) {
+  const { f, pos } = boardF(), me = league().teams.find(isUserTeam);
+  if (f === 'board' && !onBoard(p.id)) return false;
+  if (f === 'needs' && !(me && fillsFor(me, p).length)) return false;
+  if (f === 'scouted' && !scouted(p.id)) return false;
+  return pos === 'all' || posGroup(p) === pos;
+}
+function boardFilterBar(lists = BOARD_FILTERS) {
+  const { f, pos } = boardF();
+  return `<div class="seg lab-seg">${lists.map(([k, l]) => `<button class="btn small ${k === f ? 'on focus' : 'off'}" data-act="boardF" data-f="${k}">${esc(l)}</button>`).join('')}</div>
+    <div class="seg lab-seg">${[['all', 'All'], ['guards', 'Guards'], ['wings', 'Wings'], ['bigs', 'Bigs']].map(([k, l]) => `<button class="btn small ${k === pos ? 'on focus' : 'off'}" data-act="boardPos" data-p="${k}">${l}</button>`).join('')}</div>`;
+}
+actions.boardF = d => { state.boardF = { ...boardF(), f: d.f }; render(); };
+actions.boardPos = d => { state.boardF = { ...boardF(), pos: d.p }; render(); };
+
 // Consensus: the whole class, ranked by the scouts.
 function draftConsensus() {
   const rows = boardOrder();
   return {
-    html: `<p class="note muted small">${rows.length} prospects ranked by our scouts. + adds a prospect to My Board; 🧩 fits a need on your team. Ratings are pre-draft: every rookie dips a little moving up to the pros, and older rookies get some of it back.</p>
-      <div class="list">${rows.map((p, i) => `<div class="board-row">${prospectRow(p).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
+    html: `<p class="note muted small">+ adds a prospect to My Board<br>🧩 fits a need on your team</p>${boardFilterBar()}
+      <div class="list">${rows.map((p, i) => !boardFilterOk(p) ? '' : `<div class="board-row">${prospectRow(p).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
         <div class="mv2"><button class="mvbtn ${onBoard(p.id) ? 'on' : ''}" data-act="toggleBoard" data-id="${p.id}" aria-label="${onBoard(p.id) ? 'Remove from' : 'Add to'} your board">${onBoard(p.id) ? '✓' : '+'}</button></div></div>`).join('')}</div>`,
   };
 }
@@ -11348,14 +11366,17 @@ function draftConsensus() {
 // War Room: your board.
 function draftWarRoom() {
   const board = myBoard();
+  const lists = BOARD_FILTERS.filter(([k]) => k !== 'board');
+  if (boardF().f === 'board') state.boardF = { ...boardF(), f: 'all' };
+  const filtered = boardF().f !== 'all' || boardF().pos !== 'all';
   return {
-    html: `<fieldset class="frame"><legend>Your Board</legend>
+    html: `${board.length ? boardFilterBar(lists) : ''}<fieldset class="frame"><legend>Your Board</legend>
         ${board.length ? `<div class="list">${(() => {
-          const tiers = boardStore().tiers;
+          const tiers = filtered ? [] : boardStore().tiers;
           const head = n => `<div class="tier-break"><span>Tier ${n}</span></div>`;
-          return board.map((p, i) => `${tiers.length && (i === 0 || tiers.includes(i)) ? head(tierAt(tiers, i)) : ''}<div class="board-row">${prospectRow(p, '', { mine: true }).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
+          return board.map((p, i) => !boardFilterOk(p) ? '' : `${tiers.length && (i === 0 || tiers.includes(i)) ? head(tierAt(tiers, i)) : ''}<div class="board-row">${prospectRow(p, '', { mine: true }).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
           <div class="mv2 mv3"><button class="mvbtn" data-act="moveBoard" data-id="${p.id}" data-dir="-1" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="mvbtn" data-act="moveBoard" data-id="${p.id}" data-dir="1" aria-label="Move down" ${i < board.length - 1 ? '' : 'disabled'}>▼</button><button class="mvbtn x" data-act="toggleBoard" data-id="${p.id}" aria-label="Remove from your board">✕</button></div></div>
-          ${i < board.length - 1 ? `<button class="tier-add ${tiers.includes(i + 1) ? 'on' : ''}" data-act="tierBreak" data-i="${i}" aria-label="${tiers.includes(i + 1) ? 'Remove the tier break here' : 'Add a tier break here'}">${tiers.includes(i + 1) ? '✕ Remove tier break' : '＋ Tier break'}</button>` : ''}`).join('');
+          ${i < board.length - 1 && !filtered ? `<button class="tier-add ${tiers.includes(i + 1) ? 'on' : ''}" data-act="tierBreak" data-i="${i}" aria-label="${tiers.includes(i + 1) ? 'Remove the tier break here' : 'Add a tier break here'}">${tiers.includes(i + 1) ? '✕ Remove tier break' : '＋ Tier break'}</button>` : ''}`).join('');
         })()}</div>
         <p class="note muted small" style="margin-top:6px">Tap "＋ Tier break" between two players to start a new tier there.</p>`
         : '<p class="note">Your board is empty. Add prospects from Prospects with +, then order them here. When you\'re on the clock, your board comes first.</p>'}
@@ -11390,7 +11411,10 @@ function finishPre(k) {
 actions.preAdvance = async d => {
   const pre = preStore();
   if (d.k === 'scout' && !pre.scoutSeen && !(await confirmBox('You haven\'t opened scouting yet. Skip it and go to the Combine?', 'Skip Scouting'))) return;
-  if (d.k === 'workouts' && !Object.keys(pre.workouts).length && !(await confirmBox('No one has worked out for you yet. Go to the draft anyway?', 'Go to Draft'))) return;
+  if (d.k === 'workouts') {
+    const done = Object.keys(pre.workouts).length;
+    if (!(await confirmBox(done ? 'Done with private workouts? This moves on to the draft.' : 'No one has worked out for you yet. Go to the draft anyway?', 'Go to Draft', 'Stay'))) return;
+  }
   finishPre(d.k);
 };
 actions.preFinish = d => finishPre(d.k);
