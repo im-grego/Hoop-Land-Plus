@@ -207,7 +207,7 @@ export function teamBooks(L, team, { level = levelOf, worth, qoEligible }) {
 // Roster needs: depth, starter quality, upside and age by position group,
 // plus play-style holes. Looks at next season's roster (players under
 // contract; options assumed picked up). Severity 1–3.
-function leagueCuts(L, level) {
+export function leagueCuts(L, level) {
   const lv = L.teams.flatMap(t => t.roster.filter(p => p.status !== 4).map(level)).sort((a, b) => b - a);
   const n = L.teams.length;
   return { starter: lv[n * 5 - 1] ?? 75, rotation: lv[n * 8 - 1] ?? 70 };

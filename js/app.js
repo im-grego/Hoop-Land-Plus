@@ -65,12 +65,12 @@ import { setGameClock, secsOf, minScale } from './gameclock.js';
 import APPEARANCE_POOL from './appearance-pool.js';
 import * as CO from './coaching.js';
 import { JERSEYS } from './jerseys.js';
-import { TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
+import { leagueCuts, TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
 import { presserQuestions, presserStories, promiseStories, leagueGram, teamSituation, playerReplies, setHoldouts } from './presser.js';
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.315.1';
+const APP_VERSION = '0.315.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -11090,10 +11090,10 @@ function centerBoard() {
 function looksCard() {
   const done = state.looks?.[seasonKey()], named = state.names?.[seasonKey()];
   return `<fieldset class="frame"><legend>🎨 Class Looks &amp; Builds</legend><div class="row">
-    <p class="note small grow">${done ? `✓ ${done.length} prospects restyled to match your league.` : 'Give the class looks from your league\'s players, and spread their regression ages, stamina and tendencies to match them. Names, stats and ratings stay.'}</p>
+    <p class="note small grow">${done ? `✓ ${done.length} prospects restyled to match your league.` : 'Restyle the class to look and play like your league\'s players.'}</p>
     ${done ? '<button class="btn small off" data-act="looksUndo">↺ Undo</button>' : '<button class="btn small focus" data-act="looksMatch">Match My League</button>'}
   </div><div class="row" style="margin-top:8px">
-    <p class="note small grow">${named ? `✓ ${named.length} prospects renamed.` : 'Give the whole class new names. Players from abroad get names and a skin tone that fit their country; the rest come from the recruiting name pool. Nobody in the league shares a name.'}</p>
+    <p class="note small grow">${named ? `✓ ${named.length} prospects renamed.` : 'Give the class new names that fit where each player is from. No repeats.'}</p>
     ${named ? '<button class="btn small off" data-act="namesUndo">↺ Undo</button>' : '<button class="btn small focus" data-act="namesMake">Generate Names</button>'}
   </div></fieldset>`;
 }
@@ -11248,7 +11248,7 @@ screens.capital = (args = {}) => {
   const realWhy = (yr, rd, from, to) => {
     const app = notes[`${from}:${yr}:${rd}`];
     const n = app && app.to === to ? app.text : RP.tradeNote(L, yr, rd, team(from), team(to));
-    return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p>${esc(n)}.</p>`, `${yr} R${rd}: ${name(from)} → ${name(to)}`)}` : '';
+    return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p>${esc(n)}.</p>`, 'Pick Info')}` : '';
   };
   let held1 = 0, held2 = 0, out = 0, total = 0;
   const yearBlocks = years.map(yr => {
@@ -16458,7 +16458,7 @@ function overviewTeam(L, t) {
       <h4 class="ov-h">Options (${books.options.length})</h4><div class="stack">${books.options.map(x => row(x, valTag(x.sal, x.worth), `<br>${x.kind === 'team' ? 'Team' : 'Player'} option $${x.sal}M · market value $${x.worth}M`)).join('') || '<p class="note small muted">None.</p>'}</div>
       <h4 class="ov-h">Extension Eligible (${books.ext.length})</h4><div class="stack">${books.ext.map(x => row(x, '', `<br>Final year $${x.sal}M · market value $${x.worth}M`)).join('') || '<p class="note small muted">None.</p>'}</div>
     </fieldset>
-    <fieldset class="frame"><legend>Roster Needs</legend>${infoBtn('needs', '<div class="need-legend sev-legend"><div class="small"><span class="sev s3"></span><span><b>Red</b>: a big need, fix it this summer.</span></div><div class="small"><span class="sev s2"></span><span><b>Gold</b>: a real need.</span></div><div class="small"><span class="sev s1"></span><span><b>Blue</b>: minor, worth watching.</span></div></div><div class="need-legend"><div class="small"><span class="badge need">Depth</span><span>Not enough rotation players at the spot.</span></div><div class="small"><span class="badge need">Starter</span><span>No starter-level player.</span></div><div class="small"><span class="badge need">Upside</span><span>No young player with starter potential.</span></div><div class="small"><span class="badge need">Age</span><span>The group is getting old.</span></div><div class="small"><span class="badge need">Style</span><span>A missing skill (spacing, rim pressure, playmaking, rim protection, rebounding).</span></div></div>')}<div class="stack">${needs.map(n => `<div class="need-row">${sevDot(n.sev)}<span class="badge need">${esc(n.group === 'style' ? 'Style' : `${n.group[0].toUpperCase()}${n.group.slice(1)} · ${n.kind}`)}</span><span class="small grow">${esc(n.text)}</span></div>`).join('') || '<p class="note small muted">No real holes.</p>'}</div>
+    <fieldset class="frame"><legend>Roster Needs</legend>${infoBtn('needs', '<div class="need-legend sev-legend"><div class="small"><span class="sev s3"></span><span><b>Red</b>: a big need, fix it this summer.</span></div><div class="small"><span class="sev s2"></span><span><b>Gold</b>: a real need.</span></div><div class="small"><span class="sev s1"></span><span><b>Blue</b>: minor, worth watching.</span></div></div><div class="need-legend"><div class="small"><span class="badge need">Depth</span><span>Not enough rotation players at this position.</span></div><div class="small"><span class="badge need">Starter</span><span>No starter-level player (Lv ' + leagueCuts(L, shownLevel).starter + '+).</span></div><div class="small"><span class="badge need">Upside</span><span>No young player with starter potential.</span></div><div class="small"><span class="badge need">Age</span><span>The group is getting old.</span></div><div class="small"><span class="badge need">Style</span><span>A missing skill (spacing, rim pressure, playmaking, rim protection, rebounding).</span></div></div>')}<div class="stack">${needs.map(n => `<div class="need-row">${sevDot(n.sev)}<span class="badge need">${esc(n.group === 'style' ? 'Style' : `${n.group[0].toUpperCase()}${n.group.slice(1)} · ${n.kind}`)}</span><span class="small grow">${esc(n.text)}</span></div>`).join('') || '<p class="note small muted">No real holes.</p>'}</div>
 </fieldset>
     <button class="btn" data-act="nav" data-to="capital" data-arg="${t.id}">📋 Draft Capital: every pick, protection and swap</button>
 `;
