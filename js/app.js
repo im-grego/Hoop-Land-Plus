@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.7';
+const APP_VERSION = '0.318.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -13336,13 +13336,13 @@ function draftLive() {
   const pkRank = pk => (pk.yr === draftYear(L) ? 0 : pk.rd === 1 ? 1 : 2);
   const sortedGive = x => [...x.give].sort((a, b) => pkRank(a) - pkRank(b) || pkVal(b) - pkVal(a) || a.yr - b.yr);
   const offerRows = offers.map((x, i) => ({ x, i, v: x.give.reduce((a, pk) => a + pkVal(pk), 0) })).sort((a, b) => b.v - a.v);
-  // Around the pick: the one before and the next three.
+  // Around the pick, the same strip as the expansion draft: the last pick, the one on the clock, and the two after it.
   const deck = done ? '' : (() => {
-    const near = [order[idx - 1], ...order.slice(idx + 1, idx + 4)].filter(Boolean);
+    const near = [order[idx - 1], ...order.slice(idx, idx + 3)].filter(Boolean);
     return `<div class="on-deck">${near.map(q => {
       const sel = live.sel[q.overall], p = sel ? byId.get(sel.pid) : null;
       const tint = p ? teamTint(teamById(sel.to) || q.owner) : '';
-      return `<div class="od-item ${isUserTeam(q.owner) ? 'mine' : ''} ${p ? 'past' : ''} ${tint ? 'tc' : ''}" data-ov="${q.overall}" ${tint ? `style="${tint}"` : ''}><span class="od-no">#${q.overall}</span>${logoImg(q.owner)}<span class="small">${p ? `<span class="od-pl">${esc(p.ln || playerName(p))}</span><span class="od-tm">${esc(q.owner.shortName)}</span>` : esc(q.owner.shortName)}</span></div>`;
+      return `<div class="od-item ${isUserTeam(q.owner) ? 'mine' : ''} ${p ? 'past' : ''} ${q === o ? 'now' : ''} ${tint ? 'tc' : ''}" data-ov="${q.overall}" ${tint ? `style="${tint}"` : ''}><span class="od-no">#${q.overall}</span>${logoImg(q.owner)}<span class="small">${p ? `<span class="od-pl">${esc(p.ln || playerName(p))}</span><span class="od-tm">${esc(q.owner.shortName)}</span>` : esc(q.owner.shortName)}</span></div>`;
     }).join('')}</div>`;
   })();
   // A welcome card the first time the draft room opens.
