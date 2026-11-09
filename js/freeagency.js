@@ -112,7 +112,7 @@ export const exceptions = league => {
 };
 // The mid-level exception a team can use today (week 2 on, once per
 // offseason): under the cap with little space, the room MLE; over the cap
-// and under the 1st apron, the non-taxpayer MLE (which hard-caps the team
+// and under the 1st apron, the non-taxpayer MLE (which hard caps the team
 // at the 1st apron); between the aprons, the taxpayer MLE; over the 2nd
 // apron, none. { kind, name, sal, yrs, hard } or null.
 export const MLE_NAMES = { mle: 'Non-taxpayer MLE', tmle: 'Taxpayer MLE', rmle: 'Room MLE' };
@@ -488,7 +488,7 @@ export const hasGrudge = (p, team) => !!team && !!GRUDGES.get(p.id)?.has(team.id
 export function checkOffer(league, team, p, offer, day, used = {}, o = FA_DEFAULTS) {
   if (hasGrudge(p, team)) return `${playerName(p)} refuses to meet with ${team.shortName}`;
   const room = offerRoom(league, team, p, day, used, o);
-  if (room.full) return `${team.shortName} roster is full (${o.rosterMax})`;
+  if (room.full) return `${team.shortName}'s roster is full (${o.rosterMax})`;
   const room0 = offerRoom(league, team, p, day, used, o);
   if (offer.sal > maxSalary(league, p, room0.bird)) return `Max for ${playerName(p)} is $${maxSalary(league, p, room0.bird)}M`;
   if (offer.yrs < 1 || offer.yrs > (room.bird ? o.birdMaxYears : o.maxYears)) return `1–${room.bird ? o.birdMaxYears : o.maxYears} years`;
@@ -496,10 +496,10 @@ export function checkOffer(league, team, p, offer, day, used = {}, o = FA_DEFAUL
   if (!room.bird && offer.yrs < 2 && isRestricted(league, p)) return 'An offer sheet runs at least 2 years';
   if (CAP_ON) {
     // Nobody goes over the 2nd apron (the game's cap), and a team that used
-    // the non-taxpayer MLE is hard-capped at the 1st apron.
+    // the non-taxpayer MLE is hard capped at the 1st apron.
     const C = capLines(league), after = teamCommitted(team) + offer.sal;
     if (after > C.apron2) return `Would put ${team.shortName} over the 2nd apron ($${C.apron2}M)`;
-    if (used.hard?.has(team.id) && after > C.apron1) return `${team.shortName} is hard-capped at the 1st apron ($${C.apron1}M)`;
+    if (used.hard?.has(team.id) && after > C.apron1) return `${team.shortName} is hard capped at the 1st apron ($${C.apron1}M)`;
   }
   if (room.bird) return null;
   const space = capSpace(league, team);

@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.312.1';
+const APP_VERSION = '0.313.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1506,7 +1506,7 @@ const CALENDAR = [
     done: () => calFlags().office },
   { key: 'review', date: '', title: 'Season in Review', blurb: 'How your season ended, the league picture, your team leaders and the awards.',
     done: () => !!calFlags().review || phaseRank(league().season) >= 2 },
-  { key: 'owner', date: '', title: 'Exit Interviews', blurb: 'The owner settles last season\'s goal and sets the next one; your key players say what they want before the summer.',
+  { key: 'owner', date: '', title: 'Exit Interviews', blurb: 'The owner grades last season\'s goal and sets the next one; your key players say what they want before the summer.',
     done: () => !!calFlags().owner || phaseRank(league().season) >= 2 },
   { key: 'hof', date: '', title: 'Hall of Fame Class', blurb: 'The newest inductees, the teams they made their names with, and who\'s on next year\'s ballot.',
     done: () => !!calFlags().hof || phaseRank(league().season) >= 2 || !hofClass(league()).length },
@@ -1514,25 +1514,25 @@ const CALENDAR = [
     done: () => !!calFlags().overview || phaseRank(league().season) >= 2 },
   { key: 'lottery', date: 'May 10', title: 'Draft Lottery', blurb: 'Watch the ping-pong balls decide the fate of your franchise.',
     done: () => phaseRank(league().season) >= 2 },
-  { key: 'expansion', date: 'May 11', title: 'Expansion Draft', blurb: 'The lottery is set: protected lists are due and the new teams pick, one player at most from each team.',
+  { key: 'expansion', date: 'May 11', title: 'Expansion Draft', blurb: 'Protected lists are due, then the new teams pick: at most one player from each roster.',
     done: () => expStore()?.status === 'done' || phaseRank(league().season) >= 3 },
-  { key: 'mock1', date: 'May 12', title: 'Mock Draft 1.0', blurb: 'The lottery is set: the first mock of the cycle and the draft preview (the board, who projects in your range and who fits your needs).',
+  { key: 'mock1', date: 'May 12', title: 'Mock Draft 1.0', blurb: 'The first mock of the cycle, plus the draft preview: the big board, who projects in your range and who fits your needs.',
     done: () => preDone('mock1') },
-  { key: 'scout', date: 'May 13', title: 'Scouting', blurb: 'Scout the class, build your board and work the phones in the front office.',
+  { key: 'scout', date: 'May 13', title: 'Scouting', blurb: 'Scout the class, build your board and work the phones.',
     done: () => preDone('scout') },
-  { key: 'combine', date: 'May 14', title: 'Draft Combine', blurb: 'Measurements, athletic testing and shooting drills, then Mock 2.0: who rose, who fell and who fell out of the first round.',
+  { key: 'combine', date: 'May 14', title: 'Draft Combine', blurb: 'Measurements, athletic testing and shooting drills. Then Mock 2.0: who rose, who fell and who dropped out of the first round.',
     done: () => preDone('combine') },
-  { key: 'workouts', date: 'Jun 1', title: 'Private Workouts', blurb: 'Bring in prospects for an interview: it reveals their potential and the ceiling on every rating.',
+  { key: 'workouts', date: 'Jun 1', title: 'Private Workouts', blurb: 'Bring prospects in for a workout to reveal their potential and the ceiling on every rating.',
     done: () => preDone('workouts') },
-  { key: 'draft', date: 'Jun 23', title: 'NBA Draft', blurb: 'Two rounds, live, with draft-day trades.',
+  { key: 'draft', date: 'Jun 23', title: 'NBA Draft', blurb: 'Both rounds, live, with draft-day trades.',
     done: () => phaseRank(league().season) >= 3 },
-  { key: 'options', date: 'Jun 29', title: 'Contracts', blurb: 'Options and qualifying offers are due. Then the extension window opens.',
+  { key: 'options', date: 'Jun 29', title: 'Contracts', blurb: 'Player options, team options and qualifying offers are due, then the extension window opens.',
     done: () => (!!optStore().done && !!extStore().done) || phaseRank(league().season) >= 4 },
   { key: 'camp', date: 'Jul 3', title: 'Summer League', blurb: 'Rookies pick their numbers, then the young cores head to Las Vegas.',
     done: () => calFlags().camp || phaseRank(league().season) >= 4 },
-  { key: 'fa1', date: 'Jul 6', title: 'Free Agency · Week 1', blurb: 'No more collusion: the market opens and the big deals happen.',
+  { key: 'fa1', date: 'Jul 6', title: 'Free Agency · Week 1', blurb: 'The market opens and the big deals get done.',
     done: () => faDone(1) },
-  { key: 'fa2', date: 'Jul 13', title: 'Free Agency · Week 2', blurb: 'Teams over the cap can use the mid-level exception.',
+  { key: 'fa2', date: 'Jul 13', title: 'Free Agency · Week 2', blurb: 'The second wave: teams over the cap shop with the mid-level exception.',
     done: () => faDone(2) },
   { key: 'fa3', date: 'Jul 20', title: 'Free Agency · Week 3', blurb: 'Last call: asking prices drop, and anyone left unsigned leaves their old team.',
     done: () => faDone(3) },
@@ -1540,9 +1540,9 @@ const CALENDAR = [
     done: () => !!calFlags().vote || !!calFlags().medical || !!calFlags().dev },
   { key: 'medical', date: 'Sep 14', title: 'Medical, Positions & Plans', blurb: 'Surgery or rehab for the injured, position changes, and a development plan for each player before camp starts.',
     done: () => !!calFlags().medical || !!calFlags().dev },
-  { key: 'dev', date: 'Sep 21', title: 'Training Camp', blurb: 'Mentorship, off-season progression and a check-in with the trainer.',
+  { key: 'dev', date: 'Sep 21', title: 'Training Camp', blurb: 'Mentorship, offseason progression and a check-in with the trainer.',
     done: () => calFlags().dev },
-  { key: 'media', date: 'Sep 28', title: 'Media Day', blurb: 'Jersey numbers, the season preview\'s top 10 storylines and the GM Survey: every GM in the league weighs in.',
+  { key: 'media', date: 'Sep 28', title: 'Media Day', blurb: 'Jersey numbers, the season\'s top 10 storylines and the GM Survey.',
     done: () => calFlags().media },
   { key: 'exhib', date: 'Oct 8', title: 'Preseason', blurb: 'Three exhibition games settle the camp battles; stash a rookie overseas or bring one home.',
     done: () => !!calFlags().exhib || !!calFlags().cuts },
@@ -2593,7 +2593,7 @@ screens.main = () => {
         <img class="hero" src="icons/banner.jpg" alt="Hoop Land">
         <fieldset class="frame"><legend>Hoop Land Plus</legend>
           <div class="stack">
-            <p class="note">Load a save from the start of the offseason (Pre-Lottery) and run the whole offseason here: the lottery, the draft, summer league, free agency and player development. Export once at the end and load it in the game. Saves from later in the offseason pick up from where they are.</p>
+            <p class="note">Load a <b>Franchise</b> save from the end of the playoffs (Pre-Lottery) and run the whole offseason here: the lottery, the draft, Summer League, free agency and player development. Export once at the end and load it back into Hoop Land. A save from later in the offseason picks up where it left off.</p>
             <label class="btn big focus"><span class="ico">📂</span> Load Season File
               <input type="file" id="fileInput"></label>
           </div>
@@ -10519,7 +10519,7 @@ screens.settings = (args) => {
       ${state.data && state.data.seasonLeagues.length > 1 ? setGroup('League', [`<div class="seg">${state.data.seasonLeagues.map((L, i) => `<button class="btn small ${i === state.leagueIdx ? 'on focus' : 'off'}" data-act="setLeague" data-i="${i}">${esc(L.shortName)}</button>`).join('')}</div>`, '<span class="note muted small">Which league in the save you are working on.</span>']) : ''}
       ${!ALWAYS_COMPLETE && pro ? setGroup('Rules', [`<div class="seg">${[['simple', 'Simple'], ['complete', 'Complete']].map(([k, l]) => `<button class="btn small ${(state.depth || 'complete') === k ? 'on focus' : 'off'}" data-act="setDepth" data-v="${k}">${l}</button>`).join('')}</div>`, '<span class="note muted small">Simple: no aprons, tax, pick protections, no-trade clauses or trade restrictions.</span>']) : ''}
       ${setGroup('Money & Trades', [
-        options('Cap system', 'capSystem', [[true, 'NBA cap & aprons'], [false, 'Save\'s cap']], 'NBA: the cap, tax line and aprons by season; the save\'s cap is set to the 2nd apron on export.'),
+        options('Cap system', 'capSystem', [[true, 'NBA cap & aprons'], [false, 'Save\'s cap']], 'NBA: the real cap, tax line and aprons for each season (the game gets the 2nd apron as its cap on export). Save\'s cap: the game\'s own number.'),
         options('Trade values', 'tradeValues', [[false, 'Hide'], [true, 'Show']], 'Show each player and pick\'s trade value, and each side\'s total, alongside the balance bar.'),
         options('Commissioner mode', 'commissioner', [[false, 'Off'], [true, 'On']], 'Trade for any team, force trades, undo and reset.'),
       ])}
@@ -14126,14 +14126,14 @@ actions.undoTrade = d => {
 // Free agency
 
 const FA_DAY_RULES = {
-  1: 'No more collusion: the market is open. A player\'s old team can go over the cap to keep him, and restricted free agents can be matched.',
-  2: 'The mid-level exceptions open: the room MLE under the cap, the non-taxpayer MLE over it (it hard-caps you at the 1st apron), the taxpayer MLE between the aprons.',
+  1: 'The market opens. Teams can go over the cap to re-sign their own players, and restricted free agents can be matched.',
+  2: 'The mid-level exceptions open: the Room MLE under the cap, the non-taxpayer MLE over it (using it leaves you hard capped at the 1st apron) and the taxpayer MLE between the aprons.',
   3: 'Players\' expectations have shifted: they\'ll take less now.',
 };
 const mleKey = () => `hlc:mle:${saveTag()}:${seasonKey()}`;
 function loadMle(k = '') { try { return new Set(JSON.parse(localStorage.getItem(mleKey() + k)) || []); } catch { return new Set(); } }
 function saveMle(set, k = '') { try { localStorage.setItem(mleKey() + k, JSON.stringify([...set])); } catch { /* ignore */ } }
-// Teams that used the non-taxpayer MLE are hard-capped at the 1st apron.
+// Teams that used the non-taxpayer MLE are hard capped at the 1st apron.
 const saveUsed = used => { saveMle(used.mle); saveMle(used.hard || new Set(), ':hard'); };
 
 function faState() {
@@ -14221,7 +14221,7 @@ screens.fa = (args = {}) => {
       ${mine.length ? `<fieldset class="frame"><legend>Your Books</legend><div class="stack">${mine.map(t => {
         const ml = FA.mleFor(L, t, s.day, s.used);
         const holds = FA.capHolds(L, t).reduce((a, p) => a + FA.capHold(L, p), 0);
-        const extra = [holds ? `<span class="gold">Cap holds $${holds}M · ${FA.capSpace(L, t) >= 0 ? `$${FA.capSpace(L, t)}M space after holds` : 'no space after holds'}</span>` : '', ml ? `<span class="gold">${ml.name} available · $${ml.sal}M</span>` : s.used.mle.has(t.id) ? '<span class="muted">MLE used</span>' : '', s.used.hard?.has(t.id) ? '<span class="down">Hard-capped at the 1st apron</span>' : '', taxOwed(t) ? `<span class="down">${coinTag(taxOwed(t))} tax still owed</span>` : ''].filter(Boolean).join(' · ');
+        const extra = [holds ? `<span class="gold">Cap holds $${holds}M · ${FA.capSpace(L, t) >= 0 ? `$${FA.capSpace(L, t)}M space after holds` : 'no space after holds'}</span>` : '', ml ? `<span class="gold">${ml.name} available · $${ml.sal}M</span>` : s.used.mle.has(t.id) ? '<span class="muted">MLE used</span>' : '', s.used.hard?.has(t.id) ? '<span class="down">Hard capped at the 1st apron</span>' : '', taxOwed(t) ? `<span class="down">${coinTag(taxOwed(t))} tax still owed</span>` : ''].filter(Boolean).join(' · ');
         return `<div class="books-row"><span class="team-stack">${logoImg(t)}<b>${esc(t.shortName)}</b></span><span class="grow">${capBarOf(FA.payroll(t), deadFor(t.id))}${extra ? `<span class="small">${extra}</span>` : ''}</span><span class="small muted" title="Up to ${O.rosterMax} until final cuts">${FA.signedRoster(t).length}/${O.seasonMax}${FA.signedRoster(t).length > O.seasonMax ? ' <span class="gold">+</span>' : ''}</span></div>`;
       }).join('')}
       </div></fieldset>` : '<p class="note muted small">Select your teams to make offers.</p>'}
@@ -16727,23 +16727,23 @@ function capGuide(tier, total) {
   const L = league(), C = FA.capLines(L), ex = FA.exceptions(L), floor = salaryFloor(L);
   const lv = [
     { k: 'under', name: 'Under the cap', range: `below $${C.cap}M`,
-      yes: ['Sign any free agent, as long as his salary fits in your space', 'Take on more salary in a trade, as long as you finish under the cap', `Space too small to matter? The Room MLE: one player up to $${ex.rmle}M for 2 years`, 'Re-sign your own players for whatever they\'re worth'],
-      no: [`Spend at least the floor ($${floor}M). Whatever you're short at the end of the summer is paid out to your players anyway`] },
+      yes: ['Sign anyone whose salary fits in your cap space', 'Take on salary in trades, as long as you stay under the cap', `Room MLE: one player, up to $${ex.rmle}M for 2 years`, 'Re-sign your own players at any price'],
+      no: [`Payroll must reach the $${floor}M floor; any shortfall at the end of the summer is paid to your players`] },
     { k: 'over', name: 'Over the cap', range: `$${C.cap}M to $${C.tax}M`,
-      yes: ['Re-sign your own players for any amount (Bird rights)', `The full MLE: one player up to $${ex.mle}M for 3 years, from week 2`, 'Minimum deals to fill the roster', 'In a trade, take back up to 125% of the salary you send, plus $1M'],
-      no: ['No more signing other teams\' free agents with cap space', 'Using the full MLE caps you hard at the 1st apron for the rest of the season'] },
+      yes: ['Re-sign your own players at any price (Bird rights)', `Non-taxpayer MLE: one player, up to $${ex.mle}M for 3 years (from Week 2)`, 'Minimum contracts', 'Trades: take back up to 125% of the salary you send, plus $1M'],
+      no: ['No signing other teams\' free agents with cap space', 'Using the non-taxpayer MLE leaves you hard capped at the 1st apron'] },
     { k: 'tax', name: 'Taxpayer', range: `$${C.tax}M to $${C.apron1}M`,
-      yes: ['Everything you could do over the cap: Bird rights, the full MLE, minimums, 125% trades'],
-      no: ['Luxury tax on every dollar over the tax line: $1.50 for each $1 of the first $5M, then $1.75, $2.50, $3.25 and up for each $5M after', 'You pay it from your coins when the season ends: 💵1 for every $1M of tax', 'The owner notices the bill'] },
+      yes: ['Everything you can do over the cap'],
+      no: ['Luxury tax on every dollar over the tax line: $1.50 per $1 on the first $5M, then $1.75, $2.50 and $3.25, rising $0.50 for each $5M after', 'Paid in coins when the season ends: 1 coin per $1M of tax', 'The owner notices the bill'] },
     { k: 'apron1', name: '1st apron', range: `$${C.apron1}M to $${C.apron2}M`,
-      yes: ['Re-sign your own players (Bird rights)', `The smaller Taxpayer MLE: one player up to $${ex.tmle}M for 2 years`, 'Minimum deals'],
-      no: ['In a trade you can\'t take back more salary than you send', 'No full MLE', 'Can\'t take in a player through a sign-and-trade', 'Still paying the tax, and more of it'] },
+      yes: ['Re-sign your own players (Bird rights)', `Taxpayer MLE: one player, up to $${ex.tmle}M for 2 years`, 'Minimum contracts'],
+      no: ['Trades: you can\'t take back more salary than you send', 'No non-taxpayer MLE', 'No acquiring players in sign-and-trades', 'A bigger tax bill'] },
     { k: 'apron2', name: '2nd apron', range: `$${C.apron2}M and up`,
-      yes: ['Keep the team you have; trades that cut salary'],
-      no: ['This is the hard ceiling: no signing or trade can take you past it', 'No MLE of any kind', 'Your first-round pick furthest out is frozen: it can\'t be traded', 'Can\'t send your own free agent out in a sign-and-trade', 'Over it in 3 of 5 seasons: that year\'s first-round pick drops to the end of the round', 'The biggest tax bill in the league'] },
+      yes: ['Trades that cut salary'],
+      no: ['Hard capped: no signing or trade can take you past it', 'No MLE of any kind', 'Your furthest-out first-round pick is frozen and can\'t be traded', 'You can\'t sign-and-trade your own free agents away', 'Over it in 3 of 5 seasons: that year\'s first-round pick drops to the end of the round', 'The biggest tax bill in the league'] },
   ];
   const at = lv.findIndex(x => x.k === tier), next = lv[at + 1];
-  return `<p class="note small"><b>Your payroll decides what you're allowed to do.</b> Each level up adds limits. Payroll here includes dead money.</p>
+  return `<p class="note small"><b>Your payroll sets what you can do.</b> Each level up adds limits. Payroll includes dead money.</p>
     ${total != null ? `<p class="note small">You're at <b>$${total}M</b>: <b class="gold">${esc(lv[at]?.name || '')}</b>${next ? `, $${[C.cap, C.tax, C.apron1, C.apron2][at] - total}M below the ${esc(next.name.toLowerCase())}` : ''}.</p>` : ''}
     <div class="cap-guide">${lv.map((x, i) => `<div class="cg-lv ${i === at ? 'here' : ''}"><p class="cg-h"><b>${esc(x.name)}</b> <span class="small muted">${x.range}</span>${i === at ? ' <span class="badge you">You</span>' : ''}</p>
       <ul class="small">${x.yes.map(t => `<li class="up">✓ <span>${esc(t)}</span></li>`).join('')}${x.no.map(t => `<li class="down">✕ <span>${esc(t)}</span></li>`).join('')}</ul></div>`).join('')}</div>`;
