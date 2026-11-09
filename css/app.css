@@ -1753,3 +1753,30 @@ fieldset.frame { position: relative; }
 a.btn { text-decoration: none; }
 .community { margin-top: 8px; }
 .bug-text { width: 100%; font: 13px/1.4 ui-monospace, Menlo, monospace; color: var(--text); background: var(--bg-dark); border: 3px solid var(--btn-edge); padding: 8px; resize: none; margin: 8px 0 12px; }
+/* Tabs never squeeze a label: they keep their text's width and wrap to a second row when they don't fit. */
+.tabs { flex-wrap: wrap; overflow-x: visible; }
+.tabs .btn { flex: 1 1 auto; min-width: max-content; }
+/* Coach list rows wrap on the narrowest phones instead of spilling out. */
+.coach-row { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.coach-row > span { display: block; min-width: 0; }
+.coach-top { flex-wrap: wrap; }
+/* Trait Changes: one change beside the name, never wrapping over it. */
+.tc-one { white-space: nowrap; flex: none; }
+/* Champion and Finals MVP read as one box: a single line between them. */
+.champ-pair > .drill-row + .drill-row { border-top: 0; }
+/* The coin and Coaching Credit icons: pixel coins after the number, like the game's coin counter. */
+.coin-tag { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.coin-ico { width: 1.15em; height: 1.15em; flex: none; image-rendering: pixelated; vertical-align: -0.2em; }
+.coin-chip .coin-tag { font-family: var(--pixel); font-size: 16px; }
+.coin-chip .coin-ico { width: 20px; height: 20px; }
+/* Top-right counters: coins over Franchise Tokens, as wide as they used to be, in a lighter frame than the big bar
+   buttons so the number and coin fit. */
+.header .btn.coin-chip { min-width: 0; height: 30px; min-height: 30px; padding: 0 10px; justify-content: flex-end; border-width: 3px; box-shadow: inset 0 0 0 3px var(--ring); clip-path: none; }
+.header .btn.coin-chip:active { box-shadow: inset 0 0 0 3px var(--ring); }
+/* The screen's ? at the top right of the page, never in the top bar. */
+.screen-help { display: flex; justify-content: flex-end; margin: -4px -2px 4px; }
+.screen-help .info-i { position: static; box-shadow: 0 3px 0 var(--btn-shadow); }
+.fans-row { gap: 8px; }
+.fans-row .muted { margin-left: 2px; }
+/* The two counters stacked fill the top bar's height (64px), like the game's. */
+.header .career-chips { gap: 4px; justify-content: space-between; }

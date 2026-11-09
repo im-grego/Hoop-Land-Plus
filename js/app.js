@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.309.1';
+const APP_VERSION = '0.312.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -566,10 +566,10 @@ function layout({ title, left = '', right = '', body, action = null, actionLeft 
 const helpKey = (map, text) => Object.keys(map).find(k => text === k || text.startsWith(`${k} `) || text.startsWith(`${k} ·`) || text.startsWith(`${k}s`));
 function addHelp(title) {
   const t = String(title || '').trim(), sk = helpKey(SCREEN_HELP, t);
-  const head = $app.querySelector('.header');
-  if (sk && head && !head.querySelector('.hdr-help')) {
+  const panel = $app.querySelector('main.panel');
+  if (sk && panel && !panel.querySelector(':scope > .screen-help')) {
     INFO[`s:${sk}`] = SCREEN_HELP[sk];
-    head.insertAdjacentHTML('beforeend', `<button class="info-i hdr-help" data-act="infoPop" data-k="${esc(`s:${sk}`)}" aria-label="What this screen does">?</button>`);
+    panel.insertAdjacentHTML('afterbegin', `<div class="screen-help"><button class="info-i" data-act="infoPop" data-k="${esc(`s:${sk}`)}" aria-label="What this screen does">?</button></div>`);
   }
   for (const lg of $app.querySelectorAll('fieldset.frame > legend')) {
     const fs = lg.parentElement;
@@ -769,6 +769,18 @@ async function loadFile(file) {
     state.leagueFile = false;
     if (!data.seasonLeagues && Array.isArray(data.teams) && data.season) { data = { seasonLeagues: [data] }; state.leagueFile = true; }
     if (!Array.isArray(data.seasonLeagues) || !data.seasonLeagues.length) throw new Error('No seasonLeagues found');
+    // The public app runs Franchise saves for now; the other modes come back once they're polished.
+    if (!state.leagueFile && FRANCHISE_ONLY()) {
+      const m = detectMode(data), L0 = data.seasonLeagues[m.li] || data.seasonLeagues[0];
+      const mode = m.kind === 'college' ? 'College' : L0?.season?.mode === 2 ? 'Career' : L0?.season?.mode === 1 ? 'Commissioner' : null;
+      if (mode || !L0?.teams?.some(t => t.id === L0.season?.teamId)) {
+        o.remove();
+        const go = await choiceBox(`<b>${mode || 'This'} saves are coming soon.</b><br>For now Hoop Land Plus runs <b>Franchise</b> saves. Join the Discord to hear when ${mode ? `${mode} mode` : 'more modes'} land${mode ? 's' : ''}.`, [['discord', 'Join Discord', 'focus'], ['ok', 'OK', 'off']]);
+        if (go === 'discord') { countEvent('discord-join'); window.open(DISCORD, '_blank', 'noopener'); }
+        countEvent(`blocked-${(mode || 'other').toLowerCase()}`);
+        return;
+      }
+    }
     state.fileName = file.name;
     state.undo = null;
     state.cal = {}; state.cutSel = {}; state.cutSeeded = false; state.rm = null; state.calLast = undefined;
@@ -1492,11 +1504,11 @@ const faDone = day => {
 const CALENDAR = [
   { key: 'office', date: 'May 1', title: 'Front Office', blurb: 'Select the teams you run.',
     done: () => calFlags().office },
-  { key: 'review', date: 'May 2', title: 'Season in Review', blurb: 'How your season ended, the league picture, your team leaders and the awards.',
+  { key: 'review', date: '', title: 'Season in Review', blurb: 'How your season ended, the league picture, your team leaders and the awards.',
     done: () => !!calFlags().review || phaseRank(league().season) >= 2 },
-  { key: 'owner', date: 'May 3', title: 'Owner & Exit Meetings', blurb: 'The owner settles last season\'s goal and sets the next one; your key players say what they want before the summer.',
+  { key: 'owner', date: '', title: 'Exit Interviews', blurb: 'The owner settles last season\'s goal and sets the next one; your key players say what they want before the summer.',
     done: () => !!calFlags().owner || phaseRank(league().season) >= 2 },
-  { key: 'hof', date: 'May 4', title: 'Hall of Fame Class', blurb: 'The newest inductees, the teams they made their names with, and who\'s on next year\'s ballot.',
+  { key: 'hof', date: '', title: 'Hall of Fame Class', blurb: 'The newest inductees, the teams they made their names with, and who\'s on next year\'s ballot.',
     done: () => !!calFlags().hof || phaseRank(league().season) >= 2 || !hofClass(league()).length },
   { key: 'overview', date: 'May 5', title: 'Offseason Overview', blurb: 'Where you stand: the books, real roster needs, your draft position and the league rumor mill.',
     done: () => !!calFlags().overview || phaseRank(league().season) >= 2 },
@@ -1849,7 +1861,7 @@ const nextUp = () => { const st = currentStep(); if (st) toast(`Next up: ${st.ti
 // team is the one the save is built around, like college.
 const isFranchise = () => { const L = league(); return L.season.mode === 0 && L.teams.some(t => t.id === L.season.teamId); };
 // Paused features: steps kept in the code but out of the app until they're ready to show.
-const PAUSED = new Set(['vote']);
+const PAUSED = new Set(['vote', 'exhib', 'rotation']);
 const activeCal = () => (state.campusPro ? campusProCal() : isCollege() ? COLLEGE_CAL : CALENDAR.filter(st => !PAUSED.has(st.key) && (st.key !== 'office' || !(isFranchise() || CAR.isCareer(league()))) && (st.key !== 'latefa' || isComplete()) && (!['owner', 'medical', 'exhib', 'rotation', 'vote'].includes(st.key) || !CAR.isCareer(league())) && (st.key !== 'expansion' || !!expThisYear())));   // a career save runs no team
 const currentStep = () => activeCal().find(st => !st.done());
 const isStep = key => currentStep()?.key === key;
@@ -2095,7 +2107,7 @@ function calendarGrid(cal, cur) {
   }
   return `<div id="cal-wrap">${calMonthHtml(cal, cur, mo, from ? { fromDay: from[0] === mo ? from[1] : 1 } : null).html}</div>`;
 }
-actions.calPick = d => { const st = activeCal().find(x => x.key === d.k); if (st) { const c = activeCal(), cu = currentStep(); toast(`${st.date} · ${st.title}`, c.indexOf(st) < (cu ? c.indexOf(cu) : c.length) ? 'Done.' : st.blurb, 3200); } };
+actions.calPick = d => { const st = activeCal().find(x => x.key === d.k); if (st) { const c = activeCal(), cu = currentStep(); toast(`${st.date ? `${st.date} · ` : ''}${st.title}`, c.indexOf(st) < (cu ? c.indexOf(cu) : c.length) ? 'Done.' : st.blurb, 3200); } };
 
 // A franchise save at the start of a season (no games played yet): set it up as the real NBA before the first
 // season. Pick moves and the forfeited firsts go into the file; protections, swaps and dead cap are kept on this
@@ -2469,6 +2481,8 @@ function countHit(path, title = '', event = false) {
   } catch { /* counting never gets in the way */ }
 }
 const countEvent = name => countHit(name, name, true);
+// Franchise-only gate: on the public site (the custom domain or the github.io address), not in local testing.
+const FRANCHISE_ONLY = () => counting() || (/\.github\.io$/.test(location.hostname) && /^\/hoop-land-plus/i.test(location.pathname));
 countHit(runningInstalled() ? '/app' : '/', runningInstalled() ? 'Opened (installed app)' : 'Opened (browser)');
 
 // ---------------------------------------------------------------------------
@@ -3445,7 +3459,7 @@ function careerChips() {
     // Franchise mode: your coins (facility upgrades) and fans (what moved them).
     const t = myTeam();
     if (!t?.frontOffice || isCollege() || !isComplete()) return '';
-    return `<div class="career-chips"><button class="btn tiny coin-chip" data-act="nav" data-to="facilities" aria-label="Coins">💵 ${coinsOf(t)}</button><button class="btn tiny coin-chip" data-act="nav" data-to="fanLog" aria-label="Fans">📣 ${t.frontOffice.fans ?? 50}</button></div>`;
+    return `<div class="career-chips"><button class="btn tiny coin-chip" data-act="nav" data-to="facilities" aria-label="Coins: the arena">${coinTag(coinsOf(t))}</button><button class="btn tiny coin-chip" data-act="nav" data-to="coachtree" aria-label="Franchise Tokens: the Coaching Tree">${tokTag((earnCoachPoints(), coachPoints()))}</button></div>`;
   }
   const on = state.stack[state.stack.length - 1]?.name === 'ledger';
   const chip = k => { const net = ledgerNet(k); return `<button class="btn tiny coin-chip" data-act="nav"${on ? ' data-replace="1"' : ''} data-to="ledger" data-arg="${k}" aria-label="${LEDGER[k].label}">${LEDGER[k].icon} ${ledgerGet(k).toLocaleString()}${net ? ` <span class="${net > 0 ? 'up' : 'down'}">${net > 0 ? '+' : ''}${net.toLocaleString()}</span>` : ''}</button>`; };
@@ -4239,7 +4253,7 @@ screens.teams = (args) => {
     title: 'Select Your Teams',
     body: `
       ${L.conferences.length >= 2 ? `<div class="tabs">
-        ${L.conferences.map((c, i) => `<button class="btn ${i === conf ? 'on focus' : 'off'}" data-act="conf" data-i="${i}">${esc(c)}</button>`).join('')}
+        ${L.conferences.map((c, i) => `<button class="btn ${i === conf ? 'on focus' : 'off'}" data-act="conf" data-i="${i}">${esc(String(c).replace(/ Conference$/i, ''))}</button>`).join('')}
       </div>` : ''}
       <p class="note">Tap the teams you control. They are skipped by auto progression and appear under Your Teams for hand-picked upgrades.</p>
       <div class="team-grid">
@@ -4610,7 +4624,7 @@ function coachCard() {
   if (!t) return '';
   earnCoachPoints();
   const c = myCoach(), yr = league().season.currentYear, e = treeStore().earned[yr];
-  return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>🎟️ Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: one for the job, more for a winning record, making the playoffs, a deep run and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. A head coach with high ratings unlocks the first tiers of his branch for free.</p><p class="small muted">Coins (💵) are different: they buy arena facility upgrades.</p>')}<div class="stack">
+  return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>' + COIN_PINK + ' Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: one for the job, more for a winning record, making the playoffs, a deep run and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. A head coach with high ratings unlocks the first tiers of his branch for free.</p><p class="small muted">Coins (💵) are different: they buy arena facility upgrades.</p>')}<div class="stack">
     <button class="drill-row tap" data-act="nav" data-to="coaches"><span class="grow"><b>${c ? esc(`${c.fn} ${c.ln}`) : 'Head coach'}</b><br><span class="muted small">Head coach · tap for his profile</span></span><span class="small">›</span></button>
     <p class="note small"><b class="gold">${tokTag(coachPoints())}</b> Franchise Tokens to spend${e ? ` · <span class="up">+${e.pts}</span> this offseason (${esc(e.why.join(', '))})` : ''}</p>
     <p class="note small muted">${CO.BRANCHES.map(b => { const ns = CO.NODES[b.k] || []; return ns.length ? `${b.icon} ${b.label} ${ns.filter(n => CO.nodeOwned(treeStore(), c, n, b.k)).length}/${ns.length}` : ''; }).filter(Boolean).join(' · ')}</p>
@@ -4637,8 +4651,12 @@ function spendCoins(t, n) {
   state.dirty = true;
   return true;
 }
-const coinTag = n => `💵${n}`;
-const tokTag = n => `🎟️${n}`;
+// The coin (gold, a ¢ on it) for coins: facility upgrades and the luxury tax. The pink coin for Franchise Tokens, which
+// buy the Coaching Tree. Both 9×9 pixel art, scaled up crisp.
+const COIN_GOLD = '<img class="coin-ico" src="icons/coin.png" alt="coins">';
+const COIN_PINK = '<img class="coin-ico" src="icons/credit.png" alt="Franchise Tokens">';
+const coinTag = n => `<span class="coin-tag">${n}${COIN_GOLD}</span>`;
+const tokTag = n => `<span class="coin-tag">${n}${COIN_PINK}</span>`;
 
 // Facilities: the four buildings, three tiers each, bought in order (a tier needs the one below it); each tier lists
 // exactly what it does in the app.
@@ -4649,7 +4667,7 @@ screens.facilities = () => {
   layout({
     title: 'Facilities',
     body: `<fieldset class="frame"><legend>${esc(t.shortName)}</legend>
-        <p class="note"><b class="gold">${coinTag(coins)}</b> coins</p>
+        <p class="note"><b class="gold">${coinTag(coins)}</b> to spend on the arena</p>
         <p class="note small muted">Each upgrade also lifts what the game itself does with the building.</p></fieldset>
       ${FX.FACILITIES.map(f => {
         const cur = FX.tierIn(t, f.k);
@@ -4703,8 +4721,8 @@ screens.coachtree = () => {
   layout({
     title: 'Skill Tree',
     body: `<fieldset class="frame"><legend>${c ? esc(`${c.fn} ${c.ln}`) : 'Your Staff'}</legend>
-        <p class="note">Franchise tokens come from each season: one for the job, more for a winning record, the ${isCollege() ? 'tournament' : 'playoffs'}, a deep run and a title. Your coach's own ratings (13+ and 17+) start tiers unlocked.</p>
-        <p class="note"><b class="gold">${tokTag(pts)}</b> franchise token${pts === 1 ? '' : 's'} to spend</p>
+        <p class="note">Franchise Tokens come from each season: one for the job, more for a winning record, the ${isCollege() ? 'tournament' : 'playoffs'}, a deep run and a title. Your coach's own ratings (13+ and 17+) start tiers unlocked.</p>
+        <p class="note"><b class="gold">${tokTag(pts)}</b> Franchise Token${pts === 1 ? '' : 's'} to spend</p>
         <div class="stack small">${Object.entries(tree.earned).map(([k, e]) => `<span class="muted">${k === 'start' ? 'Start' : k}: +${e.pts} · ${esc(e.why.join(', '))}</span>`).join('')}</div></fieldset>
       ${CO.BRANCHES.map(b => {
         const nodes = CO.NODES[b.k].filter(n => n.spine || extras);
@@ -4724,12 +4742,12 @@ actions.buyNode = d => {
   const cur = tierNow(d.k);
   const pc = n.spine ? CO.TIER_COST[n.spine - 1] : n.pts;
   if (n.spine ? n.spine !== cur + 1 : !n.req.every(id => CO.nodeOwned(tree, myCoach(), CO.NODES[d.k].find(x => x.id === id), d.k))) return;
-  if (coachPoints() < pc) { toast('Not enough tokens', '', 2400, true); return; }
+  if (coachPoints() < pc) { toast('Not enough Franchise Tokens', '', 2400, true); return; }
   if (n.spine) tree.bought[d.k] = n.spine; else (tree.nodes ||= {})[n.id] = true;
   tree.spent += pc;
   saveTree();
   if (d.k === 'culture' && n.spine && state.auto[state.leagueIdx]) applyCulture();
-  toast(`${n.label} unlocked`, `${tokTag(pc)} spent`);
+  toast(`${n.label} unlocked`, `${pc} Franchise Token${pc === 1 ? '' : 's'} spent`);
   render();
 };
 
@@ -8825,7 +8843,7 @@ screens.roster = (args) => {
         <h2 class="team-title">${esc(teamFull(t))}</h2>
         ${many ? `<button class="nav-btn" data-act="nav" data-replace="1" data-to="roster" data-arg="${nextT.id}" aria-label="Next team">▶</button>` : '<span></span>'}
       </div>
-      ${rosterCoachLine(t)}
+      ${rosterCoachLine(t)}${isUserTeam(t) && t.frontOffice && isComplete() && !isCollege() ? `<button class="btn left small fans-row" data-act="nav" data-to="fanLog"><span class="ico">👥</span> Fans <b>${t.frontOffice.fans ?? 50}</b><span class="muted small">/ 100 · what moved them</span></button>` : ''}
       ${!isCollege() ? `<div class="grid2" style="margin-bottom:8px"><button class="btn small" data-act="nav" data-to="payroll" data-arg="${t.id}">📒 Five-Year Payroll</button><button class="btn small" data-act="nav" data-to="lineup" data-arg="${t.id}">🔁 Lineup & Minutes</button></div><button class="btn small" data-act="nav" data-to="history" data-arg="${t.id}" style="margin-bottom:8px">📜 Franchise History</button>` : ''}
       ${movesBox(L, t)}
       ${rosterBreakdownBox(t)}
@@ -9135,7 +9153,7 @@ const appKeys = () => Object.keys(localStorage).filter(k => k.startsWith('hlc'))
 function appBackupBox() {
   const n = appKeys().length;
   return setGroup('Back Up the App', [`<div class="grid2"><button class="btn small" data-act="appBackup">💾 Save Backup</button><label class="btn small off">📂 Load Backup<input type="file" id="appRestoreIn" accept=".json,application/json" hidden></label></div>`,
-    `<span class="note muted small">Owner goals and trust, promises, stashed players, trade exceptions, faces, coaching tokens and settings live only in this browser (${n} item${n === 1 ? '' : 's'}). Save a backup now and then; load it on a new phone or after clearing the browser. Your season files are separate.</span>`]);
+    `<span class="note muted small">Owner goals and trust, promises, stashed players, trade exceptions, faces, Franchise Tokens and settings live only in this browser (${n} item${n === 1 ? '' : 's'}). Save a backup now and then; load it on a new phone or after clearing the browser. Your season files are separate.</span>`]);
 }
 actions.appBackup = async () => {
   const keys = Object.fromEntries(appKeys().map(k => [k, localStorage.getItem(k)]));
@@ -15957,7 +15975,7 @@ function traitChangesCard(filter = () => true, title = 'Trait Changes') {
   const rows = league().teams.filter(isUserTeam).flatMap(t => t.roster).map(p => ({ p, ds: driftsOf(p).filter(filter) })).filter(x => x.ds.length);
   if (!rows.length) return '';
   const why = rows.map(({ p, ds }) => `<p class="small trait-txt"><b>${esc(playerName(p))}</b>: ${ds.map(x => `${esc(driftShort(x))}, ${esc(x.why)}`).join('; ')}</p>`).join('');
-  return `<fieldset class="frame"><legend>${title}</legend>${infoBtn(`tc:${title}`, `<p class="small muted">Green helps, red hurts. For Ego and Money, down is good.</p>${why}`)}<div class="stack">${rows.map(({ p, ds }) => `<div class="drill-row tap one-line" data-act="openPlayer" data-id="${p.id}"><span class="grow"><b>${esc(playerName(p))}</b></span><span class="small">${ds.map(x => `<span class="trait-txt ${driftGood(x) ? 'up' : 'down'}">${esc(driftShort(x))}</span>`).join(' · ')}</span></div>`).join('')}</div></fieldset>`;
+  return `<fieldset class="frame"><legend>${title}</legend>${infoBtn(`tc:${title}`, `<p class="small muted">Each player's biggest change shows on the card; every change is listed here. Green helps, red hurts. For Ego and Money, down is good.</p>${why}`)}<div class="stack">${rows.map(({ p, ds }) => `<div class="drill-row tap one-line" data-act="openPlayer" data-id="${p.id}"><span class="grow"><b>${esc(playerName(p))}</b></span><span class="small tc-one">${(() => { const x = [...ds].sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0]; return `<span class="trait-txt ${driftGood(x) ? 'up' : 'down'}">${esc(driftShort(x))}</span>${ds.length > 1 ? ` <span class="muted">+${ds.length - 1}</span>` : ''}`; })()}</span></div>`).join('')}</div></fieldset>`;
 }
 // A change of situation (a trade, a new deal, a bigger role) lifts a player's
 // mood, a lot more when he was unhappy; a smaller role costs some. Each kind
@@ -16622,7 +16640,7 @@ function taxSettle() {
     if (pay) spendCoins(t, pay);
     st.owed[t.id] = bill - pay;
     done[t.id] = { bill, pay };
-    toast(`💵 ${t.shortName} paid the luxury tax`, `${coinTag(pay)} for $${bill}M of tax${bill > pay ? ` · ${coinTag(bill - pay)} still owed` : ''}`, 4200, bill > pay);
+    toast(`${t.shortName} paid the luxury tax`, `${pay} coins for $${bill}M of tax${bill > pay ? ` · ${bill - pay} coins still owed` : ''}`, 4200, bill > pay);
   }
   taxSave(st);
 }
@@ -17255,7 +17273,7 @@ screens.review = () => {
         <p class="note small" style="padding:4px 10px 10px">${esc(historyHeadline(t, r) || reviewHeadline(r, t))}</p>
       </div>
       ${uiTabs('review', [
-        ['mine', 'Your Season', `      ${s ? `<fieldset class="frame"><legend>The Season</legend>
+        ['mine', 'Your Season', `      ${s ? `<fieldset class="frame"><legend>${r.yr} Season</legend>
         <div class="stat-grid">
           <div class="tap" data-act="teamStats" data-k="ppg"><b>${f1(s.ppg)}</b><span>PPG</span>${rk('ppg')}</div><div class="tap" data-act="teamStats" data-k="opp"><b>${f1(s.opp)}</b><span>Opp PPG</span>${rk('opp')}</div><div class="tap" data-act="teamStats" data-k="margin"><b class="${s.ppg >= s.opp ? 'up' : 'down'}">${s.ppg >= s.opp ? '+' : ''}${f1(s.ppg - s.opp)}</b><span>Margin</span>${rk('margin')}</div>
           <div class="tap" data-act="teamStats" data-k="fg"><b>${f1(s.fg)}%</b><span>FG</span>${rk('fg')}</div><div class="tap" data-act="teamStats" data-k="tp"><b>${f1(s.tp)}%</b><span>3PT</span>${rk('tp')}</div><div class="tap" data-act="teamStats" data-k="ft"><b>${f1(s.ft)}%</b><span>FT</span>${rk('ft')}</div>
@@ -17266,13 +17284,13 @@ screens.review = () => {
       ${r.pro ? traitChangesCard(x => x.src.startsWith('season:'), 'Trait Changes') : ''}${r.pro ? retireNote() : ''}${r.pro && alphaClash(t) ? `<p class="note small gold">${esc(alphaClash(t))}</p>` : ''}
       ${r.mine.length ? `<fieldset class="frame"><legend>Your Awards</legend><div class="stack">${r.mine.map(w => awRow(`🏅 ${w.name}${w.team != null ? ` (${['1st', '2nd', '3rd'][w.team] || ''} team)` : ''}`, w.p)).join('')}</div></fieldset>` : ''}`],
         ['league', r.pro ? 'League' : 'National', `      <fieldset class="frame"><legend>${r.pro ? 'League' : 'National'} Picture</legend>
-        ${r.champ ? `<div class="drill-row"><span class="grow">${logoImg(r.champ)} <b>${esc(r.champ.city)} ${esc(r.champ.name)}</b><br><span class="small muted">${r.pro ? 'Champions' : 'National champions'}${r.runnerUp ? `, over ${esc(r.runnerUp.city)}${r.finalsScore ? ` ${r.finalsScore}` : ''}` : ''}</span></span><span>🏆</span></div>` : ''}
-        ${r.finalsMvp ? awRow(r.finalsMvp.name, r.finalsMvp.p) : ''}
-        ${r.semis.length ? `<p class="note small" style="margin-top:6px">${r.pro ? 'Conference Finals' : 'Final Four'}: ${r.semis.map(([a, b]) => `<b class="${a === t ? 'gold' : ''}">${esc(a.shortName)}</b> over <b class="${b === t ? 'gold' : ''}">${esc(b.shortName)}</b>`).join(' · ')}</p>` : ''}
+        <div class="champ-pair">${r.champ ? `<div class="drill-row"><span class="grow">${logoImg(r.champ)} <b>${esc(r.champ.city)} ${esc(r.champ.name)}</b><br><span class="small muted">${r.pro ? 'Champions' : 'National champions'}${r.runnerUp ? `, over ${esc(r.runnerUp.city)}${r.finalsScore ? ` ${r.finalsScore}` : ''}` : ''}</span></span><span>🏆</span></div>` : ''}
+        ${r.finalsMvp ? awRow(r.finalsMvp.name, r.finalsMvp.p) : ''}</div>
+        ${r.semis.length ? `<p class="note small" style="margin-top:6px">${r.pro ? 'Conference Finals' : 'Final Four'}: ${r.semis.map(([a, b]) => `<b class="${a === t ? 'gold' : ''}">${esc(a.shortName)}</b> vs <b class="${b === t ? 'gold' : ''}">${esc(b.shortName)}</b>`).join(' · ')}</p>` : ''}
         <h4 class="ov-h">Awards</h4><div class="stack">${r.national.map(w => awRow(w.name, w.p, awardNum(w, r.yr))).join('') || '<p class="note small muted">None recorded.</p>'}</div>
         ${r.allTeams.length ? `<h4 class="ov-h">First Teams</h4><div class="stack">${[...new Set(r.allTeams.map(w => w.name))].map(n => `<p class="note small"><b>${esc(n)}:</b> ${r.allTeams.filter(w => w.name === n).map(w => esc(playerName(w.p))).join(', ')}</p>`).join('')}</div>` : ''}
       </fieldset>`],
-        ['stand', 'Standings', `      ${confStandings(t, r.yr)}${r.pro ? teamDirections(L) : ''}<fieldset class="frame"><legend>${esc(r.division || 'Division')} Standings</legend>
+        ['stand', 'Standings', `      ${r.pro ? teamDirections(L) : ''}${confStandings(t, r.yr)}<fieldset class="frame"><legend>${esc(r.division || 'Division')} Standings</legend>
         <div class="stack">${r.standings.map((x, i) => `<div class="stand-row ${x.t === t ? 'mine' : ''}"><span class="small muted">${i + 1}</span>${logoImg(x.t)}<span class="grow small"><b>${esc(x.t.shortName)}</b></span><span class="small">${x.W}-${x.L}</span><span class="small muted">${x.cW}-${x.cL} conf</span></div>`).join('')}</div>
       </fieldset>`],
       ])}`,
@@ -18767,7 +18785,7 @@ actions.stashDrop = async d => {
 // The calendar days for the newer offseason pieces: each gathers its cards and a wrap-up.
 const myTeamsNow = () => league().teams.filter(isUserTeam);
 screens.ownerday = () => layout({
-  title: 'Owner & Exit Meetings',
+  title: 'Exit Interviews',
   body: myTeamsNow().map(t => ownerMeetingBox(t) + exitInterviewBox(t)).join('') || '<p class="note">Pick your team first.</p>',
   action: isStep('owner') ? { act: 'stepWrap', k: 'owner', label: 'Wrap Up' } : null,
 });

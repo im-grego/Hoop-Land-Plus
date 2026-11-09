@@ -25,7 +25,7 @@ export const MAX_TIER = 3;
 // The tree, top down, five rows deep. Each branch is a spine of three tiers
 // (the old tree, opened by tokens or by the coach's own rating) with side
 // nodes beside it, a row of two more, and a capstone that needs both. Tokens
-// (franchise tokens, earned each season) buy everything. `spine` nodes are
+// (Franchise Tokens, earned each season) buy everything. `spine` nodes are
 // the tiers; the rest are the Complete rules' additions.
 export const NODES = {
   dev: [
