@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.322.6';
+const APP_VERSION = '0.323.2';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = '0.1.0 Beta';
 const $app = document.getElementById('app');
@@ -634,7 +634,7 @@ function render() {
   if (state.data) { FA.setQualifyingOffers(optStore().qo); FA.setCapSystem(isComplete() && state.params.capSystem !== false && !isCollege()); FA.setComplete(isComplete() && !isCollege(), FA.capLines(league()).cap); FX.setFacilitiesOn(isComplete() && !isCollege()); if (!isCollege()) syncGrudges(); if (!isCollege()) syncDead(); FA.setHoldTeams(league().teams.filter(isUserTeam).map(t => t.id)); FA.setHoldDay(league().season.phase === 6 ? league().season.currentDay : 0); syncTpes(); syncExpansion(); if (!isCollege()) realClassCheck(); }
   if (state.data && isCollege() && state.cal) { try { localStorage.setItem(collegeCalKey(), JSON.stringify(state.cal)); } catch { /* ignore */ } }
   if (state.data && !isCollege()) { seasonDrift(); cpuComebacks(); cpuNumbers(); cpuJerseys(); if (state.retFixed !== saveTag()) { state.retFixed = saveTag(); fixRetiredNumbers(); } glSettle(); taxSettle(); cpuShifts(); }   // once an offseason each (the G League once a season)
-  if (state.data && !isCollege()) { careerSync(); syncScarcity(); poSettle(); }
+  if (state.data && !isCollege()) { careerSync(); syncScarcity(); poSettle(); campAuto(); }
   const top = state.stack[state.stack.length - 1];
   const view = `${state.stack.length}:${top.name}:${top.args?.tab ?? ''}:${top.name === 'fa' ? '' : top.args?.view ?? ''}:${top.args?.id ?? ''}`;
   const y = window.scrollY;
@@ -1589,7 +1589,11 @@ const CALENDAR = [
     done: () => !!calFlags().vote || !!calFlags().medical || !!calFlags().dev },
   { key: 'medical', date: 'Sep 14', title: 'Medical, Positions & Plans', blurb: 'Surgery or rehab for the injured, position changes, and a development plan for each player before camp starts.',
     done: () => !!calFlags().medical || !!calFlags().dev },
-  { key: 'dev', date: 'Sep 21', title: 'Training Camp', blurb: 'Mentorship, offseason progression and a check-in with the trainer.',
+  { key: 'staff', date: 'Sep 16', title: 'Staff & Scheme', blurb: 'Your coaching staff and the system you run, set before camp opens.',
+    done: () => !!calFlags().staff || !!calFlags().meeting || !!calFlags().dev },
+  { key: 'meeting', date: 'Sep 18', title: 'Team Meeting', blurb: 'Sit your players down one at a time, then the meeting: tendencies and traits shift toward your system.',
+    done: () => !!calFlags().meeting || !!calFlags().dev },
+  { key: 'dev', date: 'Sep 21', title: 'Player Progression', blurb: 'Offseason progression, summer trait changes and mentorship, then the strength program and the trainer.',
     done: () => calFlags().dev },
   { key: 'media', date: 'Sep 28', title: 'Media Day', blurb: 'Jersey numbers, the season\'s top 10 storylines and the GM Survey.',
     done: () => calFlags().media },
@@ -1921,7 +1925,7 @@ const isFranchise = () => { const L = league(); return L.season.mode === 0 && L.
 // Paused features: steps kept in the code but out of the app until they're ready to show.
 // Summer League (the tournament and the rookies' age adjustment screen) is paused: the step is Rookie Signings, and the
 // age adjustment runs quietly when it wraps up.
-const PAUSED = new Set(['vote', 'exhib', 'rotation']);
+const PAUSED = new Set(['vote', 'exhib', 'rotation', 'camp']);   // camp: Rookie Numbers (numbers are on the Contracts step's Rookies tab)
 const activeCal = () => (state.campusPro ? campusProCal() : isCollege() ? COLLEGE_CAL : CALENDAR.filter(st => !PAUSED.has(st.key) && (st.key !== 'office' || !(isFranchise() || CAR.isCareer(league()))) && (st.key !== 'latefa' || isComplete()) && (!['owner', 'medical', 'exhib', 'rotation', 'vote'].includes(st.key) || !CAR.isCareer(league())) && (st.key !== 'expansion' || !!expThisYear())));   // a career save runs no team
 const currentStep = () => activeCal().find(st => !st.done());
 const isStep = key => currentStep()?.key === key;
@@ -2054,9 +2058,10 @@ function stepActions(key) {
       // One button a week: it opens free agency or starts the week as needed and goes straight to the market.
       return `<button class="btn big focus" data-act="faWeek">✍️ ${s.phase === 5 ? 'Open Free Agency' : `Week ${day} Market`}</button>`;
     }
-    case 'dev': return `${isCollege() ? '' : '<button class="btn" data-act="nav" data-to="meeting" style="margin-bottom:8px">🗣️ Team Meeting: talk to players about their game</button><button class="btn" data-act="nav" data-to="staff" style="margin-bottom:8px">🧑‍🏫 Staff &amp; Scheme first</button>'}<button class="btn big focus" data-act="devBegin">🏋️ ${state.auto[state.leagueIdx] ? 'Training Camp' : 'Begin Training Camp'}</button>`;
-    case 'media': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="storylines">🎤 Media Day</button><button class="btn focus" data-act="nav" data-to="survey">📋 GM Survey</button></div>
-      <button class="btn small off" data-act="mediaDone" style="margin-top:8px">✅ Wrap Up</button>`;
+    case 'staff': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="staff">🧑‍🏫 Begin</button><button class="btn" data-act="staffDone">⏭ Skip</button></div>`;
+    case 'meeting': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="meeting">🗣️ Begin</button><button class="btn" data-act="meetingSkip">⏭ Skip</button></div>`;
+    case 'dev': return `<button class="btn big focus" data-act="devBegin">🏋️ ${state.auto[state.leagueIdx] ? 'Player Progression' : 'Begin Player Progression'}</button>`;
+    case 'media': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="storylines">🎤 Begin</button><button class="btn" data-act="mediaDone">⏭ Skip</button></div>`;
     case 'cuts': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="latefa">📞 Camp Deals</button><button class="btn" data-act="liveTrade">🔁 Trade</button></div>
       <button class="btn big focus" data-act="nav" data-to="cuts" style="margin-top:8px">✂️ Final Cuts</button>`;
     case 'rotation': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="lineup">🔁 Lineup &amp; Minutes</button><button class="btn" data-act="rotSuggest">✅ Use Suggested</button></div>`;
@@ -2067,7 +2072,7 @@ function stepActions(key) {
 
 // ---- Calendar grid (experiment): the month as a phone calendar, an emoji on each step's date,
 // finished and passed dates crossed off, the current topic on top.
-const CAL_EMOJI = { vote: '🗳️', expansion: '🏟️', rotation: '🔁', owner: '🤝', medical: '🩺', exhib: '🏀', meeting: '🗣️', office: '🏢', review: '📜', hof: '🏛️', overview: '📊', preview: '👀', lottery: '🎱', mock1: '📝', scout: '🔎', combine: '⏱️', mock2: '🗒️', workouts: '🏀', draft: '🎤', options: '📃', ext: '✍️', camp: '🌴', fa1: '💰', fa2: '💰', fa3: '💰', dev: '🏋️', survey: '📋', media: '📸', latefa: '📞', cuts: '✂️', export: '🏁',
+const CAL_EMOJI = { staff: '🧑‍🏫', vote: '🗳️', expansion: '🏟️', rotation: '🔁', owner: '🤝', medical: '🩺', exhib: '🏀', meeting: '🗣️', office: '🏢', review: '📜', hof: '🏛️', overview: '📊', preview: '👀', lottery: '🎱', mock1: '📝', scout: '🔎', combine: '⏱️', mock2: '🗒️', workouts: '🏀', draft: '🎤', options: '📃', ext: '✍️', camp: '🌴', fa1: '💰', fa2: '💰', fa3: '💰', dev: '🏋️', survey: '📋', media: '📸', latefa: '📞', cuts: '✂️', export: '🏁',
   departures: '🚪', seniors: '🎓', portal: '🔀', showcase: '⭐', rw1: '📣', rw2: '📣', rw3: '📣', rw4: '📣', signing: '✍️', preseason: '🏟️', rosterlock: '🔒', practice: '🏃' };
 const CAL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const CAL_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -2408,8 +2413,9 @@ const STEP_SCREENS = {
   expansion: ['expansion', 'player', 'roster'], vote: ['vote'], hof: ['hofClass', 'player'], owner: ['ownerday', 'player'], medical: ['medical', 'player'], exhib: ['exhib', 'player', 'latefa', 'liveTrade'],
   office: ['teams'], overview: ['overview'], lottery: ['lottery'], mock1: ['mock', 'draft', 'prospect', 'overview'], scout: ['draft', 'prospect', 'lottery', 'liveTrade'], combine: ['combine', 'prospect', 'mock'], workouts: ['workouts', 'prospect', 'draft', 'liveTrade'], draft: ['draft', 'prospect', 'liveTrade', 'mock'], options: ['options', 'extensions'],
   camp: ['camp', 'rookies'], fa1: ['fa'], fa2: ['fa', 'liveTrade'], fa3: ['fa', 'liveTrade'],
+  staff: ['staff', 'coachtree', 'coaches', 'coach', 'playbook', 'playbookEdit', 'gameplan', 'scoring', 'teamBooks'],
   meeting: ['meeting', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'teamBooks', 'coaches', 'coach'],
-  dev: ['staff', 'meeting', 'offseason', 'report', 'mentor', 'rookies', 'trainer', 'strength', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'teamBooks', 'coaches', 'coach'], media: ['storylines', 'survey'], cuts: ['cuts', 'latefa', 'liveTrade'], rotation: ['lineup', 'player'], export: ['export'],
+  dev: ['staff', 'meeting', 'offseason', 'report', 'mentor', 'rookies', 'trainer', 'strength', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'teamBooks', 'coaches', 'coach'], media: ['storylines', 'survey', 'mediaRumors'], cuts: ['cuts', 'latefa', 'liveTrade'], rotation: ['lineup', 'player'], export: ['export'],
   review: ['review', 'teamStats', 'player'], waters: ['waters', 'player'], nil: ['nil', 'player'], retention: ['retention', 'player'], carousel: ['carousel'], camps: ['camps', 'recruitee'], legacy: ['legacy', 'player'], schedule: ['schedule'], tour: ['tour', 'player'], walkons: ['walkons', 'player'], redshirt: ['redshirt', 'player'], madness: ['madness'], mediaday: ['mediaday', 'player'], departures: ['departures'], seniors: ['seniors'], portal: ['portal'], showcase: ['showcase', 'recruitee'], rw1: ['recruit', 'recruitee', 'recruitweek'], rw2: ['recruit', 'recruitee', 'recruitweek'], rw3: ['recruit', 'recruitee', 'recruitweek'], rw4: ['recruit', 'recruitee', 'recruitweek'], signing: ['signing'], preseason: ['preseason'], rosterlock: ['rosterlock'], practice: ['practice'], summer: ['offseason', 'report', 'mentor', 'trainer', 'strength', 'coachtree', 'tendencies', 'tendplayer', 'gameplan', 'playbook'],
 };
 const ALWAYS = ['chemistry', 'roadmap', 'grads', 'fantasy', 'expansion', 'history', 'faces', 'gleague', 'fanLog', 'nbaSetup', 'export', 'checkin', 'myteams', 'ledger', 'career', 'careerFA', 'lineup', 'deadline', 'playoffs', 'main', 'editor', 'settings', 'roster', 'payroll', 'capital', 'classLab', 'coaching', 'news', 'search', 'transactions', 'rumors', 'player', 'leaders', 'prospect', 'coachtree', 'facilities', 'gameplan', 'playbook', 'scoring', 'playbookEdit', 'coaches', 'coach', 'teamBooks'];
@@ -3571,7 +3577,7 @@ screens.chemistry = (args = {}) => {
   const rows = ch.ps.map(p => ({ p, r: ch.net.get(p.id) })).sort((a, b) => Math.abs(b.r?.d || 0) - Math.abs(a.r?.d || 0) || (b.p.season?.morale ?? 0) - (a.p.season?.morale ?? 0));
   layout({
     title: 'Chemistry',
-    body: `<fieldset class="frame"><legend>🤝 ${esc(t.shortName)} Locker Room · ${ch.avg}</legend>
+    body: `<fieldset class="frame"><legend>💙 ${esc(t.shortName)} Locker Room · ${ch.avg}</legend>
       <p class="note small muted">Average morale across the roster (0 to 100), and how each player's mood has moved since the offseason began: new deals, roles, promises, trades and teammates.</p>
       <div class="stack">${rows.map(({ p, r }) => `<div class="drill-row wrap"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${moraleTag(p)}${r ? ` <span class="${r.d > 0 ? 'up' : r.d < 0 ? 'down' : 'muted'}">${r.d > 0 ? '▲' : r.d < 0 ? '▼' : ''}${Math.abs(r.d) || '±0'}</span>` : ' <span class="muted small">no change</span>'}
         ${r ? `<br><span class="small muted">${r.why.map(x => `${x.d > 0 ? '+' : ''}${x.d} ${esc(x.why)}`).join(' · ')}</span>` : ''}</span></div>`).join('')}</div>
@@ -4614,11 +4620,11 @@ function jerseyCard() {
   const li = state.leagueIdx;
   const done = state.jerseys?.[li];
   const clashes = done ? [] : jerseyClashes(league());
-  if (!done && !clashes.length) return '<fieldset class="frame"><legend>Jersey Numbers</legend><p class="note">👕 No jersey number conflicts: every player has his own number.</p></fieldset>';
+  if (!done && !clashes.length) return '<fieldset class="frame"><legend>Jersey Numbers</legend><p class="note">✓ No conflicts.</p></fieldset>';
   return `<fieldset class="frame"><legend>Jersey Numbers</legend><div class="stack">
     ${done ? `<p class="note"><span class="up">${done.length}</span> players renumbered: ${esc(done.slice(0, 4).map(c => `${c.p.ln} #${c.from}→#${c.to}`).join(', '))}${done.length > 4 ? '…' : ''}</p>
       <button class="btn small" data-act="undoJerseys">↺ Undo</button>`
-    : `<p class="note">${clashes.length} players share a number with a teammate or wear a retired number. The longest-tenured player keeps it; the others try the single digit of their number (#27 → 7), then the lowest free one.</p>
+    : `<p class="note">${clashes.length === 1 ? '1 player shares' : `${clashes.length} players share`} a number with a teammate or wear${clashes.length === 1 ? 's' : ''} a retired one.</p>
       <button class="btn" data-act="fixJerseys">👕 Fix Jersey Numbers</button>`}
   </div></fieldset>`;
 }
@@ -4630,19 +4636,17 @@ function gearCard() {
   let body;
   if (done) {
     const players = new Set(done.gear.map(x => x.p)).size, suited = new Set(done.suits.map(x => x.m)).size;
-    body = `<p class="note"><span class="up">${done.gear.length}</span> socks and sleeves on <span class="up">${players}</span> players now match their jerseys, and <span class="up">${suited}</span> players' suits were redone.</p>
+    body = `<p class="note">✓ Gear matched on <span class="up">${players}</span> players${suited ? `, <span class="up">${suited}</span> suits redone` : ''}.</p>
       <button class="btn small" data-act="undoGear">↺ Undo</button>`;
   } else {
     const log = GEAR.matchLeague(L, APPEARANCE_POOL.tattoos), suits = GEAR.matchSuitsLeague(L);
     const n = log.length, players = new Set(log.map(x => x.p)).size, suited = new Set(suits.map(x => x.m)).size;
     GEAR.undoMatch(log); GEAR.undoSuits(suits);
-    body = n || suited ? `<p class="note">${players} new faces (rookies, or players on a new team with other colors) have socks, sleeves or head gear that don't match their jerseys (${n} items): white on every jersey (black on a black jersey), headbands white or black, glasses one color throughout. ${suited} of them need the suit: 202020 jacket and pants, white shirt, team-color tie. Everyone else, and every coach, keeps his look.</p>
-      <button class="btn" data-act="matchGear">🧦 Match Socks, Sleeves &amp; Suits</button>`
+    body = n || suited ? `<p class="note">${players} new face${players === 1 ? '' : 's'} ${players === 1 ? 'has' : 'have'} gear that doesn't match the team${suited ? `, and ${suited} need${suited === 1 ? 's' : ''} a suit` : ''}.</p>
+      <button class="btn" data-act="matchGear">🧦 Match Gear</button>`
       : '<p class="note">🧦 Every sock, sleeve and suit already matches.</p>';
   }
-  return `<fieldset class="frame"><legend>Socks, Sleeves &amp; Suits</legend><div class="stack">${body}
-    <details><summary class="note small muted">Colors by team</summary><div class="stack" style="margin-top:6px">${[...L.teams].sort((x, y) => x.shortName.localeCompare(y.shortName)).map(t => `<div class="small" style="display:flex;justify-content:space-between;align-items:center"><b>${esc(t.shortName)}</b><span>${GEAR.targets(t).map(sw).join('')}</span></div>`).join('')}</div></details>
-  </div></fieldset>`;
+  return `<fieldset class="frame"><legend>Gear &amp; Suits</legend><div class="stack">${body}</div></fieldset>`;
 }
 actions.matchGear = () => { (state.gear ||= {})[state.leagueIdx] = { gear: GEAR.matchLeague(league(), APPEARANCE_POOL.tattoos), suits: GEAR.matchSuitsLeague(league()) }; state.dirty = true; render(); };
 actions.undoGear = () => { const d = state.gear?.[state.leagueIdx]; if (d) { GEAR.undoSuits(d.suits); GEAR.undoMatch(d.gear); } delete state.gear[state.leagueIdx]; state.dirty = true; render(); };
@@ -5530,7 +5534,7 @@ screens.offseason = (args = {}) => {
   const P = state.params;
   const bands = P.ageBands;
   layout({
-    title: isCollege() ? 'Summer Development' : 'Training Camp',
+    title: isCollege() ? 'Summer Development' : 'Player Progression',
     body: `
       ${isCollege() ? '' : ''}
       ${uiTabs('camp', [
@@ -5554,22 +5558,23 @@ screens.offseason = (args = {}) => {
             <button class="btn big focus" data-act="runAuto">▶ Run Offseason Progression</button>`}
         </div>
       </fieldset>
-      ${isCollege() ? '' : influenceBox(auto)}${auto && !isCollege() ? traitChangesCard(() => true, 'Summer Trait Changes') : ''}`],
-        ['players', 'Players', `      ${isCollege() ? '' : mentorCard()}
-      ${strengthCard()}
+      ${auto && !isCollege() ? traitChangesCard(() => true, 'Summer Trait Changes') : ''}
+      ${isCollege() ? '' : mentorCard()}`],
+        ['players', isCollege() ? 'Players' : 'Strength Program', `      ${strengthCard()}
       ${isCollege() ? '' : `<fieldset class="frame"><legend>Trainer</legend><div class="stack">
         <p class="note small">Health, potential and size changes for your players.</p>
         <button class="btn" data-act="nav" data-to="trainer" ${auto && strengthStore().results ? '' : 'disabled'}>🩺 Meet with the Trainer</button></div></fieldset>`}`],
       ])}`,
     // Step through: progression first, then the players; wrap up only from the last tab.
-    action: !auto ? null : (state.uiTab?.camp || 'prog') === 'prog' ? { act: 'campNext', label: isCollege() ? 'Advance to Players' : 'Advance to Mentorship' }
-      : { act: 'calDevBack', label: `Wrap Up ${isCollege() ? 'Summer Development' : 'Training Camp'}` },
+    action: !auto ? null : (state.uiTab?.camp || 'prog') === 'prog' ? { act: 'campNext', label: isCollege() ? 'Advance to Players' : 'Advance to Strength Program' }
+      : { act: 'calDevBack', label: `Wrap Up ${isCollege() ? 'Summer Development' : 'Player Progression'}` },
   });
 };
 
 actions.campNext = () => { (state.uiTab ||= {}).camp = 'players'; render(); window.scrollTo(0, 0); };
 // Staff and scheme, set before camp opens.
-screens.staff = () => layout({ title: 'Staff & Scheme', body: coachCard(), action: { act: 'back', label: 'Done' } });
+screens.staff = () => layout({ title: 'Staff & Scheme', body: coachCard(), action: isStep('staff') ? { act: 'staffDone', label: 'Wrap Up Staff & Scheme' } : { act: 'back', label: 'Done' } });
+actions.staffDone = () => { calFlags().staff = true; state.undo = null; state.dirty = true; goHome(); nextUp(); };
 // The team meeting, simulated for the whole league with one formula: every head coach talks to his group and
 // each player's tendencies and makeup shift. Yours runs on your coaching tree; the rest on their coach's own ratings.
 function simMeetings() {
@@ -5629,15 +5634,21 @@ function rookieDealsCard() {
     .sort((a, b) => a.p.history.draft.pk - b.p.history.draft.pk);
   if (!mine.length) return '';
   const min = FA.FA_DEFAULTS.minSalary;
-  return `<fieldset class="frame"><legend>Rookie Contracts</legend><div class="list">${mine.map(({ p }) => {
+  const rks = myRookies();
+  return `<fieldset class="frame"><legend>Rookie Contracts</legend>${infoBtn('rknum', '<p class="small"><b>Jersey numbers</b>: tap the number next to a rookie\'s name to pick the one he\'ll wear. Taken and retired numbers are greyed out; his college number is marked, with a button to keep it.</p>', 'Rookie Numbers')}<div class="list">${mine.map(({ p }) => {
     const d = p.history.draft;
     const signed = p.status === 3;
-    return `<div class="prow"><span class="name">${esc(playerName(p))} ${lvTag(p)}</span>
+    const r = rks.find(x => x.p.id === p.id), open = r && state.numPick === p.id;
+    const numTxt = `#${p.num === 100 ? '00' : p.num >= 0 ? p.num : '–'}`;
+    const col = r ? collegeNumber(p) : null;
+    const colFree = r && col != null && col !== p.num && !r.team.roster.some(x => x !== p && x.num === col) && !(r.team.retiredNumbers || []).some(x => x.num === col);
+    return `<div class="prow"><span class="name">${esc(playerName(p))} ${r ? `<button class="linkish num-chip" data-act="openWall" data-id="${p.id}" title="Pick his number">${numTxt}</button>` : ''} ${lvTag(p)}</span>
       <span class="right small">R${d.rd} · #${d.pk}</span>
       <span class="meta">${signed ? `<span class="up">✍️ $${p.contract.sal}M × ${p.contract.yrs} · TO</span>` : d.rd === 1 ? `Scale deal: $${rookieScale(L, d.pk)}M × 4 · TO` : `$${min}M · TO`}</span>
       ${signed ? '' : `<span class="opt-btns full">${d.rd === 1
         ? `<button class="btn small focus" data-act="rookieSign" data-id="${p.id}" data-y="4">Sign</button>`
         : `<button class="btn small focus" data-act="rookieSign" data-id="${p.id}" data-y="4">4 Years</button><button class="btn small focus" data-act="rookieSign" data-id="${p.id}" data-y="2">2 Years</button><button class="btn small off" data-act="rookieCut" data-id="${p.id}">✂️ Cut</button>`}</span>`}
+      ${open ? `<span class="full">${colFree ? `<button class="btn small focus" data-act="pickNumber" data-id="${p.id}" data-n="${col}">Keep college #${col}</button>` : ''}${numberWall(r)}</span>` : ''}
     </div>`;
   }).join('')}</div></fieldset>`;
 }
@@ -5677,6 +5688,15 @@ screens.camp = () => {
     action: (ageDone || state.summerTour[state.leagueIdx]) && (state.summerTour[state.leagueIdx]?.stage || 'final') === 'final' ? { act: 'calCampBack', label: 'Wrap Up' } : null,
   });
 };
+// Rookie Numbers is paused: when the Contracts step is done, its wrap-up (the rookies' age adjustment) runs on its own.
+function campAuto() {
+  if (!PAUSED.has('camp') || calFlags().camp || isCollege() || CAR.isCareer(league())) return;
+  // Only once the calendar is past Contracts (the draft and Contracts both behind you).
+  const cal = activeCal(), cur = currentStep(), oi = cal.findIndex(st => st.key === 'options');
+  if (oi < 0 || (cur && cal.indexOf(cur) <= oi) || phaseRank(league().season) < 3) return;
+  if (SUMMER_OFF && !(state.summer[state.leagueIdx] || summerDone())) { ageAdjust(); state.compCache = {}; state.dirty = true; }
+  calFlags().camp = true;
+}
 actions.calCampBack = () => { if (SUMMER_OFF && !(state.summer[state.leagueIdx] || summerDone())) { ageAdjust(); state.compCache = {}; state.dirty = true; } calFlags().camp = true; state.undo = null; goHome(); toast('Next up: Free Agency'); };
 // One tap: progression runs (the first time) and camp opens on its results; Wrap Up is at the bottom of camp.
 actions.devBegin = async () => {
@@ -7733,7 +7753,7 @@ screens.mentor = () => {
   }).join('') : '<p class="note">Pick your teams first.</p><button class="btn" data-act="nav" data-to="teams">👥 Pick Your Teams</button>';
   layout({
     title: 'Mentorship',
-    body: `<img class="hero" src="icons/hero-mentor.jpg" alt=""><p class="note muted small">Tap a skill to have the veteran teach it. Skills are listed best fit first for the young player.</p>${body}`,
+    body: `<p class="note muted small">Tap a skill to have the veteran teach it. Skills are listed best fit first for the young player.</p>${body}`,
   });
 };
 
@@ -9057,10 +9077,10 @@ screens.roster = (args) => {
         ${many ? `<button class="nav-btn" data-act="nav" data-replace="1" data-to="roster" data-arg="${nextT.id}" aria-label="Next team">▶</button>` : '<span></span>'}
       </div>
       ${rosterCoachLine(t)}
-      ${!isCollege() ? `<div class="grid2 team-links"><button class="btn small" data-act="nav" data-to="history" data-arg="${t.id}">📜 History</button><button class="btn small" data-act="nav" data-to="payroll" data-arg="${t.id}">📒 Contracts</button></div>` : ''}
+      ${!isCollege() ? `<div class="grid2 team-links"><button class="btn small" data-act="nav" data-to="history" data-arg="${t.id}">📜 History</button><button class="btn small" data-act="nav" data-to="payroll" data-arg="${t.id}">🤝 Contracts</button></div>` : ''}
       ${isUserTeam(t) && t.frontOffice && isComplete() && !isCollege() ? (() => { const ch = chemOf(t); return `<div class="grid2 team-mini">
-        <button class="btn left small mini-box" data-act="nav" data-to="fanLog"><span class="ico">👥</span> <span>Fans <b>${t.frontOffice.fans ?? 50}</b><br><span class="muted small">/ 100</span></span></button>
-        <button class="btn left small mini-box" data-act="nav" data-to="chemistry" data-arg="${t.id}"><span class="ico">🤝</span> <span>Chemistry <b>${ch.avg}</b><br><span class="small"><span class="up">▲${ch.up}</span> <span class="down">▼${ch.down}</span></span></span></button>
+        <button class="btn left small mini-box" data-act="nav" data-to="fanLog"><span class="ico">👥</span> <span>Fans <b>${t.frontOffice.fans ?? 50}</b><br>${(() => { const mv = fanLog().filter(x => x.tid === t.id && x.yr === league().season.currentYear); const up = mv.filter(x => x.d > 0).reduce((a, x) => a + x.d, 0), dn = mv.filter(x => x.d < 0).reduce((a, x) => a - x.d, 0); return mv.length ? `<span class="small"><span class="up">▲${up}</span> <span class="down">▼${dn}</span></span>` : '<span class="muted small">/ 100</span>'; })()}</span></button>
+        <button class="btn left small mini-box" data-act="nav" data-to="chemistry" data-arg="${t.id}"><span class="ico">💙</span> <span>Chemistry <b>${ch.avg}</b><br><span class="small"><span class="up">▲${ch.up}</span> <span class="down">▼${ch.down}</span></span></span></button>
       </div>`; })() : ''}
       ${movesBox(L, t)}
       ${rosterBreakdownBox(t)}
@@ -14966,9 +14986,8 @@ screens.meeting = () => {
     title: 'Team Meeting',
     body: `${done ? meetingResultsBox() : `<p class="note small">Sit your players down one at a time: each talk is one message about his game, chosen from where his ratings and his habits disagree.</p>`}
       ${talksBox(done)}
-      ${proposalBox()}
-      ${coachCard()}`,
-    action: done ? null : { act: 'meetingEnd', label: 'End the Meeting' },
+      ${proposalBox()}`,
+    action: done ? (isStep('meeting') || currentStep()?.key === 'dev' ? { act: 'meetingWrap', label: 'Wrap Up Team Meeting' } : null) : { act: 'meetingEnd', label: 'End the Meeting' },
   });
 };
 // Every other team's coach holds the same meeting, on his own ratings (no skill tree).
@@ -14993,6 +15012,7 @@ function ensureMeetings() {
   if (calFlags().meeting || isCollege()) return;
   simMeetings();
 }
+actions.meetingWrap = () => { goHome(); nextUp(); };
 actions.meetingSkip = () => { calFlags().meeting = true; calFlags().meetingLeague = runCpuMeetings(mulberry32((saveSalt() ^ 0xc9e7) >>> 0)); state.dirty = true; state.undo = null; render(); };
 actions.meetingEnd = () => {
   const L = league();
@@ -15709,7 +15729,7 @@ screens.survey = (args) => {
       ${mediaTabs('survey')}
       <div class="sv-tabs">${tabs.map(t => `<button class="btn ${t === tab ? 'on focus' : 'off'}" data-act="surveyTab" data-t="${t}">${SURVEY_LABEL[t]}</button>`).join('')}</div>
       ${body}`,
-    action: null,
+    action: isStep('media') ? { act: 'mediaTab', k: 'mediaRumors', label: 'Next: Rumors' } : null,
   });
 };
 actions.surveyTab = d => replace('survey', { tab: d.t });
@@ -16648,16 +16668,20 @@ screens.storylines = () => {
           <span class="story-n">${i + 1}</span>
           <div><b>${s.icon} ${esc(s.title)}</b><p class="note small">${esc(s.text)}</p></div>
         </li>`).join('')}</ol>` : '<p class="note">Nothing to report yet.</p>'}
-      ${leagueGramCard()}
-      <div class="stack" style="margin-top:12px">
-        ${isStep('media') ? '<button class="btn big focus" data-act="mediaDone">✅ Wrap Up Media Day</button>' : ''}
-      </div>`,
+`,
+    action: isStep('media') ? { act: 'mediaTab', k: 'survey', label: 'Next: GM Survey' } : null,
   });
 };
+// Tab 3: what's trending on Hoop Gram this summer.
+screens.mediaRumors = () => layout({
+  title: 'Rumors',
+  body: `${mediaTabs('mediaRumors')}${leagueGramCard() || '<p class="note small muted">Quiet on Hoop Gram so far.</p>'}`,
+  action: isStep('media') ? { act: 'mediaDone', label: 'Wrap Up Media Day' } : null,
+});
 
 // Media Day and the GM Survey are one step: two tabs.
-const mediaTabs = cur => isStep('media') ? `<div class="tabs">${[['storylines', '🎤 Media Day'], ['survey', '📋 GM Survey']].map(([k, l]) => `<button class="btn ${k === cur ? 'on focus' : 'off'}" data-act="mediaTab" data-t="${k}">${l}</button>`).join('')}</div>` : '';
-actions.mediaTab = d => replace(d.t === 'survey' ? 'survey' : 'storylines', {});
+const mediaTabs = cur => isStep('media') ? `<div class="tabs">${[['storylines', 'Media Day'], ['survey', 'GM Survey'], ['mediaRumors', 'Rumors']].map(([k, l]) => `<button class="btn ${k === cur ? 'on focus' : 'off'}" data-act="mediaTab" data-t="${k}">${l}</button>`).join('')}</div>` : '';
+actions.mediaTab = d => { const t = d.t || d.k; replace(['survey', 'mediaRumors'].includes(t) ? t : 'storylines', {}); window.scrollTo(0, 0); };
 actions.mediaDone = () => {
   if (!calFlags().survey) { saveSurveyHist(surveyNow()); calFlags().survey = true; }
   applyPresser(); mediaMindMorale(); calFlags().media = true; goHome(); toast('Next up: Roster Finalization');
@@ -19151,7 +19175,7 @@ $app.addEventListener('change', e => {
 screens.medical = () => layout({
   title: 'Medical, Positions & Plans',
   body: `${medBox()}${posShiftBox()}` || '<p class="note">Nobody needs a medical call, and no position changes are suggested.</p>',
-  action: isStep('medical') ? { act: 'stepWrap', k: 'medical', label: 'On to Training Camp' } : null,
+  action: isStep('medical') ? { act: 'stepWrap', k: 'medical', label: 'On to Staff & Scheme' } : null,
 });
 screens.exhib = () => layout({
   title: 'Preseason',
@@ -19740,15 +19764,14 @@ screens.export = () => {
   layout({
     title: isStep('export') ? 'Opening Night' : 'Export',
     body: `
-      ${(() => { const prep = jerseyCard() + gearCard() + capWarn(); const warn = capWarn() || (!isCollege() && jerseyClashes(league()).length && !(state.jerseys || {})[state.leagueIdx]); return uiTabs('export', [
-        ['file', 'File', `      <fieldset class="frame"><legend>Season File</legend>
+      ${jerseyCard()}${gearCard()}
+      <fieldset class="frame"><legend>Season File</legend>
         <p class="note file-name">${esc(state.fileName)}</p>
         ${(() => { const L = league(); if (isCollege() || !FA.capSystemOn()) return ''; return L.teams.filter(isUserTeam).filter(t => underFloor(L, t)).map(t => { const fl = teamFloor(L, t); return `<p class="note small gold">💸 ${esc(t.shortName)} are $${fl - floorPay(t)}M under the salary floor ($${fl}M, 90% of ${FA.capScaleOf(t) < 1 ? 'their expansion' : 'the'} cap). Sign someone, or the shortfall is paid out to your players.</p>`; }).join(''); })()}
         ${(() => { const L = league(); if (isCollege() || L.season.phase !== BUMP_PHASES[0] || calFlags().cuts) return ''; const over = overFifteen(L), mineOver = over.filter(isUserTeam); return over.length ? `<p class="note small ${mineOver.length ? 'down' : 'gold'}">✂️ Roster Finalization isn't done: ${over.length} team${over.length === 1 ? ' is' : 's are'} over 15. ${mineOver.length ? `<b>${mineOver.map(t => esc(t.shortName)).join(', ')}</b> ${mineOver.length === 1 ? 'is yours' : 'are yours'}: make your cuts first, or the game cuts for you without looking at ratings. ` : ''}The CPU teams make their cuts when you export.</p>` : ''; })()}
         ${CAR.isCareer(league()) && state.ledgerIn ? Object.entries(LEDGER).map(([k, d]) => `<p class="note small">${d.icon} ${d.label}: ${ledgerIn(k).toLocaleString()} when loaded ${ledgerNet(k) >= 0 ? '+' : '−'} ${Math.abs(ledgerNet(k)).toLocaleString()} in the app = <b>${Math.max(0, ledgerIn(k) + ledgerNet(k)).toLocaleString()}</b> written to the file. <button class="btn tiny" data-act="nav" data-to="ledger" data-arg="${k}">Ledger</button></p>`).join('') : ''}
         <div class="stack">
-          ${canShare ? '<button class="btn big focus" data-act="share">📤 Save to Files / Dropbox</button>' : ''}
-          <button class="btn ${canShare ? '' : 'big focus'}" data-act="download">💾 Download File</button>
+          <button class="btn big focus" data-act="download">💾 Download File</button>
         </div>
         ${inArtifact() ? `<p class="note gold small">Saves as <b>${esc(artifactName(state.fileName))}</b>: rename it to <b>${esc(state.fileName)}</b> (remove ".json") so Hoop Land can load it.</p>` : ''}
         <p class="note muted small">Load it in Hoop Land and start the season. Keep a backup of the original.</p>
@@ -19757,11 +19780,7 @@ screens.export = () => {
       </fieldset>
       ${isCollege() || EDITOR_OFF() ? '' : `<fieldset class="frame"><legend>League File (experimental)</legend>
         <p class="note small">Turns this save into a league file: rosters, contracts, ratings, tendencies, coaches, picks and history as they stand, with the season reset so you can start a brand new franchise from it.</p>
-        <button class="btn" data-act="downloadLeague">🌐 Download League File</button></fieldset>`}
-      ${inArtifact() ? '' : dropboxFrame()}`],
-        ['prep', 'Prep', prep, !!warn],
-        ['preview', 'Preview', openingNightTab()],
-      ], warn && isStep('export') ? 'prep' : 'file'); })()}`,
+        <button class="btn" data-act="downloadLeague">🌐 Download League File</button></fieldset>`}`,
   });
 };
 

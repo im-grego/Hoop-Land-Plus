@@ -1648,7 +1648,8 @@ fieldset.frame { position: relative; }
 fieldset.frame { clip-path: var(--notch-frame); }
 .info-i { border-radius: 0; box-shadow: 0 3px 0 var(--btn-shadow); clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% + 3px - 3px), calc(100% - 3px) calc(100% + 3px), 3px calc(100% + 3px), 0 100%, 0 3px); }
 .btn.tiny, .btn.small { --nt: 3px; }
-.cal.now, .clock-card, .mvp-card, .cal-day, .ol-need, .lot-chip { clip-path: var(--notch); }
+.cal.now, .clock-card, .mvp-card, .ol-need, .lot-chip { clip-path: var(--notch); }
+.cal-day { clip-path: none; border-radius: 0; }   /* the calendar: plain square days */
 .cal-day, .lot-chip, .ol-need { --nt: 2px; }
 /* The asset switch rides in the pinned trade header: their assets / yours, always one tap away. */
 .trade-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 2px; }
