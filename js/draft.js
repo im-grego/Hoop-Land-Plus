@@ -458,7 +458,7 @@ export function scoutingReport(p, league, pot = p.pot, leagues = null, known = (
     S.tp = c.tpa >= 1 ? standing(shooters, x => x.r.tp, mine.tp) : null;
     S.tpa = one('tpa');
   }
-  const f1 = v => v.toFixed(1);
+  const f1 = v => (v == null || !isFinite(v) ? '–' : v.toFixed(1));
   const said = (s, what) => s ? `${what}, ${ord(s.rank)} of ${s.of} ${vs}` : null;
   // Which stat backs which area: [standing, words].
   const EVIDENCE = mine ? {
@@ -469,6 +469,8 @@ export function scoutingReport(p, league, pot = p.pot, leagues = null, known = (
     STL: [S.stl, `${f1(mine.stl)} SPG`], BLK: [S.blk, `${f1(mine.blk)} BPG`],
     SCO: [S.pts, `${f1(mine.pts)} PPG`],
   } : {};
+  // A number the line doesn't have (no shots taken, say): no evidence from it.
+  for (const k of Object.keys(EVIDENCE)) if (EVIDENCE[k]?.[1]?.includes('–')) EVIDENCE[k] = null;
 
   const items = ATTRS.map(k => {
     const cur = Math.min(capFor(k), p.attributes[k][0]);

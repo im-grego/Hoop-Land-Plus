@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.322.1';
+const APP_VERSION = '0.322.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -986,19 +986,40 @@ function dumpSalary(L, t, limit, pay = filePay, log = [], o = {}) {
     for (const p of order) {
       const to = others.filter(x => fits(x, p) && cpuPhysical(p, x) !== 'fail').sort((a, b) => underFloor(L, b) - underFloor(L, a) || reb(a) - reb(b) || pay(a) - pay(b))[0];
       if (!to) continue;
-      const picks = o.picks ? dumpPicks(L, t, Math.max(0, overpaid(p)) * Math.max(1, p.contract?.yrs || 1)) : [];
+      // A bad contract costs the team dumping it picks; a solid player on a fair-ish deal still has a price, even from
+      // a team that has to move him: half to three quarters of his worth, more the more teams can fit him.
+      // The contract can take up to 40% off what he's worth; past that it's the overpay rule below that decides.
+      const worth = Math.max(valueOf(p) * 0.6, valueOf(p) + contractValue(p).adj);
+      // Awful: the deal eats half or more of what he's worth (or there's little worth to begin with).
+      const awful = contractValue(p).adj <= -0.5 * valueOf(p) || worth < 12;
+      const bidders = awful ? 0 : others.filter(x => fits(x, p) && cpuPhysical(p, x) !== 'fail').length;
+      const back = awful ? [] : buyPicks(L, to, worth * (0.5 + 0.25 * Math.min(1, (bidders - 1) / 3)));
+      const picks = awful && o.picks ? dumpPicks(L, t, Math.max(0, overpaid(p)) * Math.max(1, p.contract?.yrs || 1)) : [];
       if (cpuPhysical(p, to) === 'flag') { const sw = sweetener2nd(L, t, picks); if (sw) picks.push(sw); }
-      executeTrade({ team: t, players: [p], picks, prospects: [] }, { team: to, players: [], picks: [], prospects: [] }, L.season.currentYear);
+      executeTrade({ team: t, players: [p], picks, prospects: [] }, { team: to, players: [], picks: back, prospects: [] }, L.season.currentYear);
       if (reb(to) === 0 && p.age >= 28 && !FA.isLifer(L, p, to) && p.season && p.season.onTradeBlock !== 2) p.season.onTradeBlock = 1;
       const max = o.picks ? FA.FA_DEFAULTS.cpuRosterMax : FA.FA_DEFAULTS.seasonMax;
       if (FA.signedRoster(to).length > max) { const c = camp(to); if (c) { FA.cutPlayer(L, to, c); log.push(`${to.shortName} released ${playerName(c)} to make room`); } }
-      log.push(`${t.shortName} dumped ${playerName(p)} ($${sal(p)}M) on ${to.shortName}${picks.length ? ` with ${picks.map(pk => `a ${pk.yr} ${pk.rd === 1 ? '1st' : '2nd'}`).join(' and ')}` : ''}`);
+      const pkTxt = pk => `a ${pk.yr} ${pk.rd === 1 ? '1st' : '2nd'}`;
+      log.push(back.length ? `${t.shortName} moved ${playerName(p)} ($${sal(p)}M) to ${to.shortName} for ${back.map(pkTxt).join(' and ')} (${bidders} team${bidders === 1 ? '' : 's'} could fit him)`
+        : `${t.shortName} dumped ${playerName(p)} ($${sal(p)}M) on ${to.shortName}${picks.length ? ` with ${picks.map(pkTxt).join(' and ')}` : ''}`);
       moved = true;
       break;
     }
     if (!moved) break;
   }
   return log;
+}
+// What a team taking on a useful player pays for him: its own picks, up to the price (the best that fits, at most two;
+// a 2nd at least once the price is worth one). Never a frozen, protected or lottery-locked pick.
+function buyPicks(L, to, price) {
+  const pool = to.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, to, pk) && !isProt(pk) && !lotteryLocked(pk))
+    .map(pk => ({ pk, v: pickValue(L, pk) })).sort((a, b) => b.v - a.v);
+  const out = [];
+  let left = price;
+  for (const x of pool) { if (out.length >= 2) break; if (x.v <= left + 4) { out.push(x.pk); left -= x.v; } }
+  if (!out.length && price >= 8) { const sec = pool.filter(x => x.pk.rd === 2).sort((a, b) => a.v - b.v)[0]; if (sec) out.push(sec.pk); }
+  return out;
 }
 // The price of a salary dump in picks, by how much dead weight goes out (overpay × years): a 2nd for a modest one,
 // a 1st for a big one, both for the worst. Own picks only, furthest out first, never a frozen, protected or lottery-locked one.
@@ -1796,19 +1817,27 @@ function fileCheck(L) {
   const where = new Map(L.teams.flatMap(t => t.roster.map(p => [p.id, { p, t }])));
   const fas = new Map((L.freeAgents || []).map(p => [p.id, p]));
   const nm = id => L.teams.find(t => t.id === id)?.shortName || '?';
+  // Options the game settled at the end of the season (it zeroes a declined deal): the app reopens them at the
+  // Contracts step, so they aren't a change to flag.
+  const optSet = new Set((L.season.news || []).filter(nw => nw.category === 2 && nw.phase === 2 && GAME_OPT[nw.type]).map(nw => nw.pid));
+  let restored = 0;
   for (const [id, [tid, sal, yrs, extYrs, extSal, num, status]] of Object.entries(m.players)) {
     const now = where.get(+id), fa = fas.get(+id);
     if (fa && status === 3 && yrs >= (next ? 2 : 1)) { items.push({ kind: 'release', text: `${playerName(fa)} was released by ${nm(tid)} with ${yrs - (next ? 1 : 0)} year${yrs - (next ? 1 : 0) === 1 ? '' : 's'} left` }); continue; }
     if (!now || now.t.id !== tid) continue;   // traded or retired: the game's call
     const c = now.p.contract || {};
     const want = !next ? [sal, yrs] : yrs === 1 && extYrs ? [extSal, extYrs] : yrs >= 2 ? [sal, yrs - 1] : null;
-    if (want && status === 3 && (c.sal !== want[0] || c.yrs !== want[1])) items.push({ kind: 'contract', text: `${playerName(now.p)} (${now.t.shortName}): $${c.sal}M × ${c.yrs}, expected $${want[0]}M × ${want[1]}` });
-    if (now.p.num !== num) items.push({ kind: 'number', text: `${playerName(now.p)} (${now.t.shortName}) wears #${now.p.num === 100 ? '00' : now.p.num}, was #${num === 100 ? '00' : num}` });
+    // An extension that started on the right years but the old salary: the extension's salary, as signed.
+    if (want && next && yrs === 1 && extYrs && c.yrs === want[1] && c.sal !== want[0] && c.sal > 0) { c.sal = want[0]; restored++; }
+    if (want && status === 3 && !optSet.has(+id) && (c.sal !== want[0] || c.yrs !== want[1])) items.push({ kind: 'contract', text: `${playerName(now.p)} (${now.t.shortName}): $${c.sal}M × ${c.yrs}, expected $${want[0]}M × ${want[1]}` });
+    // A number the game changed on its own goes back to the one you exported (unless a teammate has it now).
+    if (now.p.num !== num && num != null && !now.t.roster.some(q => q !== now.p && q.num === num)) { now.p.num = num; restored++; }
   }
   const have = new Set(L.teams.flatMap(t => t.draftPicks.map(pk => `${pk.otid}:${pk.yr}:${pk.rd}`)));
   const dy = draftYear(L);
   for (const k of m.picks) { const [otid, yr, rd] = k.split(':').map(Number); if (yr > dy - (next ? 0 : 1) && !have.has(k)) items.push({ kind: 'pick', text: `${nm(otid)}'s ${yr} ${rd === 1 ? '1st' : '2nd'} is missing` }); }
-  return { next, items, from: m.yr };
+  if (restored) state.dirty = true;
+  return { next, items, from: m.yr, restored };
 }
 // Round-trip probe: did the game keep what the app wrote? Every field the app edits that the game might not keep
 // (coins, fans, legacy, bonds, coach relationships, no-trade clauses, the farewell tour, lineups, trade stat lines) is
@@ -1827,11 +1856,9 @@ function probe(L) {
     const fo = t.frontOffice || {}, coach = (fo.staff || []).find(c => c.pos === 1);
     o[`coins:${t.id}`] = fo.coins ?? null; o[`fans:${t.id}`] = fo.fans ?? null;
     if (coach) o[`rp:${t.id}`] = coach.rp ?? null;
-    o[`preset:${t.id}`] = t.lineupPreset ?? null;
     for (const p of t.roster) {
       o[`bond:${p.id}`] = p.season?.relationship ?? 0;
       o[`ntc:${p.id}`] = p.contract?.noTrd ?? 0;
-      o[`min:${p.id}`] = p.minutes?.[0] ?? 0;
       o[`stint:${p.id}`] = (p.stats || []).find(x => x.league === 0 && x.yr === yr)?.season?.length ?? 0;
     }
   }
@@ -1852,7 +1879,9 @@ function probeCheck(L) {
   const now = probe(L), out = {};
   for (const [k, [was, set]] of Object.entries(m.diff)) {
     if (!(k in now)) continue;   // traded away, retired: nothing to read
-    const g = k.split(':')[0], r = (out[g] ||= { kept: 0, reset: 0, moved: 0 }), v = JSON.stringify(now[k]);
+    const g = k.split(':')[0];
+    if (g === 'min' || g === 'preset') continue;   // lineups: off while Set the Rotation is paused
+    const r = (out[g] ||= { kept: 0, reset: 0, moved: 0 }), v = JSON.stringify(now[k]);
     if (v === JSON.stringify(set)) r.kept++; else if (v === JSON.stringify(was)) r.reset++; else r.moved++;
   }
   return Object.keys(out).length ? out : null;
@@ -1871,6 +1900,7 @@ function fileCheckCard() {
     ${c.items.length ? `<p class="note small">${c.items.length} thing${c.items.length === 1 ? '' : 's'} changed ${c.next ? 'over the season' : 'since your export'} that the app didn't do:</p>
       <details class="cmb-fold"><summary>Show them</summary><div class="stack">${c.items.slice(0, 60).map(x => `<p class="note small" style="margin:0">${ico[x.kind]} ${esc(x.text)}</p>`).join('')}</div></details>`
     : `<p class="note small up">✓ Everything matches what you exported${c.next ? ' (trades and retirements during the season aside)' : ''}.</p>`}
+    ${c.restored ? `<p class="note small">↺ ${c.restored} change${c.restored === 1 ? '' : 's'} the game made on its own (jersey numbers, extension salaries) went back to what you exported.</p>` : ''}
     ${probeLines(state.probeCheck)}
     <button class="btn small off" data-act="fileCheckOk" style="margin-top:6px">Got it</button></fieldset>`;
 }
@@ -2096,7 +2126,8 @@ function calendarGrid(cal, cur) {
   const months = [...new Set(cal.map(st => calPos(st)).filter(Boolean).map(p => p[0]))].sort((a, b) => a - b);
   if (!months.length) return '';
   const curPos = cur ? calPos(cur) : null;
-  const mo = curPos ? curPos[0] : months[months.length - 1];
+  // A step with no date (the first few, before the lottery) shows the first month; past the last step, the last.
+  const mo = curPos ? curPos[0] : cur ? months[0] : months[months.length - 1];
   const prevKey = state.calLast;
   state.calLast = cur ? cur.key : '__done';
   let from = null;
@@ -12102,7 +12133,15 @@ function workoutAnswer(p, k) {
   if (k === 'best') {
     const st = r().strengths[0];
     const what = GROWTH[st?.k] || 'game';
-    return { quote: `My ${what}. ${vary2(p, 3, ['Nobody in this class does it better.', 'That translates on day one.', 'That\'s what I hang my hat on.'])}`,
+    // His body, not a skill: said the way a player says it.
+    const BODY = {
+      STR: ['I\'m already built like a pro. Nobody in this class is moving me off my spot.', 'My strength. I don\'t get pushed around, and I finish through contact.'],
+      SPD: ['My speed. Nobody in this class is staying in front of me, end to end.', 'I\'m faster than anybody here. Give me space and I\'m gone.'],
+      STM: ['My motor. I can go all game and I\'m still running in the fourth.', 'I don\'t get tired. Forty minutes, no problem.'],
+      HT: [`My size. I'm ${heightStr(p.ht)}, and you can't teach that.`, `My length. At ${heightStr(p.ht)}, I change shots just standing there.`],
+    };
+    const quote = BODY[st?.k] ? vary2(p, 3, BODY[st.k]) : `My ${what}. ${vary2(p, 3, ['Nobody in this class does it better.', 'That translates on day one.', 'That\'s what I hang my hat on.'])}`;
+    return { quote,
       staff: st?.k && SKILL_ATTRS.includes(st.k) || PHYSICAL.includes(st?.k) ? `Coaches: ${roomFor(p, st.k) >= 3 ? `it's already good and there's more coming.` : `it's about as good as it gets already.`}` : '' };
   }
   if (k === 'ready') {
