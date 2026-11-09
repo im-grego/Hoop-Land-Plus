@@ -189,7 +189,7 @@ export function coachReaction(league, team, old, next) {
 export function playerSwing(r, loyalty = 10, winning = 10) {
   return clamp(Math.round(r.belief * 6 * (1 + (winning - 10) / 20) - r.like * 6 * (1 + (loyalty - 10) / 20)), -10, 10);
 }
-export const fanSwing = r => clamp(Math.round(r.belief * 7 - r.like * 4), -9, 9);
+export const fanSwing = r => clamp(Math.round(r.belief * 12 - r.like * 6), -15, 15);   // a coaching hire is a big summer story
 
 // ---------------------------------------------------------------------------
 // Stars and the system: a star whose play style the playbook and scheme don't

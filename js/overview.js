@@ -45,7 +45,7 @@ const STYLES = [
 ];
 const WONT = [
   { k: 'threePoint', max: -4, text: "won't shoot threes" },
-  { k: 'pass', max: -4, text: 'rarely gives it up' },
+  { k: 'pass', max: -4, text: "doesn't make the extra pass" },
   { k: 'dunk', max: -4, text: "doesn't play above the rim" },
   { k: 'defReb', max: -4, text: "doesn't rebound" },
 ];
@@ -81,7 +81,22 @@ export function playStyles(p, n = 3) {
     .sort((a, b) => margin(b) - margin(a)).slice(0, n)
     .sort((a, b) => STYLE_TIER[a.k] - STYLE_TIER[b.k] || margin(b) - margin(a));
 }
-export const wontDo = p => (p.tendencies ? WONT.filter(w => p.tendencies[w.k] <= w.max).map(w => w.text) : []);
+// Bad habits: he leans into something (a tendency of +2 or more) his rating can't back up (under 10 of 20).
+function badHabits(p) {
+  const t = p.tendencies, r = k => +p.attributes?.[k]?.[0] || 0, out = [];
+  if (!t) return out;
+  const deep = t.threePoint >= 2 && r('TPT') < 10, mid = (t.twoPoint + t.fades) / 2 >= 2 && r('MID') < 10;
+  if (deep && mid) out.push('has bad shot selection');
+  else if (deep) out.push('forces shots from deep');
+  else if (mid) out.push('settles for bad midrange shots');
+  if ((t.cross + t.spin + t.step) / 3 >= 2 && r('DRB') < 10) out.push('dribbles the air out of the ball');
+  // Goes inside a lot without the touch to finish there (a strong dunker never reads as hesitant).
+  if (r('DNK') < 12 && ((t.dunk >= 2 && r('DNK') < 10) || (t.floater >= 2 && r('LAY') < 10) || ((t.post + t.hook) / 2 >= 2 && r('INS') < 10))) out.push('is hesitant under the basket');
+  if (t.block >= 2 && r('BLK') < 10) out.push('bites on pump fakes');
+  if ((t.stealOnBall + t.stealOffBall) / 2 >= 2 && r('STL') < 10) out.push((p.id || 0) % 2 ? 'gambles in the passing lanes' : 'gets called for reaching in');
+  return out;
+}
+export const wontDo = p => (p.tendencies ? [...badHabits(p), ...WONT.filter(w => p.tendencies[w.k] <= w.max).map(w => w.text)] : []);
 // A plain sentence for a report: no tags, just what he does.
 export function styleSentence(p) {
   const t = p.tendencies;
@@ -118,18 +133,18 @@ export function playRead(p, skills = []) {
   if (!off.length && bestTool(p)) off.push(bestTool(p));
   const def = st.filter(x => DEFENSE.has(x.k) || BOARDS.has(x.k)).slice(0, 2);
   const defT = def.map(x => x.text);
-  const wont = wontDo(p).slice(0, 2), sk = skills.filter(Boolean).slice(0, 4);   // his best four skills
+  const wont = wontDo(p).slice(0, 3), sk = skills.filter(Boolean).slice(0, 4);   // his best four skills
   const out = [];
   let first = '';
   if (off.length && def.length) first = `He ${pair(off)}, and ${def.some(x => DEFENSE.has(x.k)) ? 'on defense he' : 'he'} ${pair(defT)}`;
   else if (off.length || def.length) first = `He ${pair(off.length ? off : defT)}`;
   else if (!sk.length) first = 'He has no strong lean in his game';
   const short = !(off.length && def.length);   // one clause so far: room for a "but"
-  if (first && wont.length && !sk.length && short) { out.push(`${first}. However, he ${pair(wont)}.`); return out.join(' '); }
+  if (first && wont.length && !sk.length && short) { out.push(`${first}. However, he ${list(wont)}.`); return out.join(' '); }
   if (first) out.push(`${first}.`);
-  if (sk.length && wont.length) out.push(`He ${list(sk)}. However, he ${pair(wont)}.`);
+  if (sk.length && wont.length) out.push(`He ${list(sk)}. However, he ${list(wont)}.`);
   else if (sk.length) out.push(first ? `On top of that, he ${list(sk)}.` : `He ${list(sk)}.`);
-  else if (wont.length) out.push(`However, he ${pair(wont)}.`);
+  else if (wont.length) out.push(`However, he ${list(wont)}.`);
   return out.join(' ');
 }
 

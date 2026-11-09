@@ -37,9 +37,10 @@ const SKILL_TALK = {
 };
 
 // Per-game line for a season in a league (all stints combined).
-export function seasonLine(p, leagueIdx, year) {
+// `part`: 'season' (the regular season) or 'playoffs'.
+export function seasonLine(p, leagueIdx, year, part = 'season') {
   const s = (p.stats || []).find(x => x.league === leagueIdx && x.yr === year);
-  const rows = s?.season || [];
+  const rows = s?.[part] || [];
   const t = { GP: 0, GS: 0, MIN: 0, PTS: 0, REB: 0, AST: 0, STL: 0, BLK: 0, TO: 0, FGM: 0, FGA: 0, FTM: 0, FTA: 0 };
   for (const r of rows) for (const k of Object.keys(t)) t[k] += k === 'MIN' ? secsOf(r, leagueIdx) / 60 : r[k] || 0;
   if (!t.GP) return null;

@@ -2,7 +2,7 @@
 // and what happened (read back from the bracket the next time a file comes in).
 import { shownLevel as levelOf } from './regression.js';
 import { seasonLine } from './storylines.js';
-import { playerName } from './savefile.js';
+import { playerName, levelOf as rawLevel } from './savefile.js';
 
 export const thisPlayoffs = L => (L.season.playoffs || []).find(x => x.yr === L.season.currentYear) || null;
 export const playoffsOf = (L, yr) => (L.season.playoffs || []).find(x => x.yr === yr) || null;
@@ -116,4 +116,69 @@ export function matchup(p, opp) {
 // What a playoff run does to his next contract: each series won adds 4%, a title 8% more, a first-round flop by a
 // featured player costs 6%.
 export const runSwing = (won, champ, featured) => 1 + won * 0.04 + (champ ? 0.08 : 0) - (won === 0 && featured ? 0.06 : 0);
+// Playoff risers. A file loaded before game 1 lifts the players built for this time of year, for the playoffs only:
+// Clutch Gene (a level per skill level), a Competitor, a Leader, a Relentless motor, an Alpha who wants the ball, and a
+// veteran who has been here before. Up to five levels, as rating points on the parts of his game he leans on most.
+// When the next offseason comes in, most of it goes away: he keeps a share only if he played up to it.
+export const RISE_KEYS = ['LAY', 'DNK', 'INS', 'MID', 'TPT', 'FTS', 'DRB', 'PAS'];
+const hash = (a, b) => { let h = (a * 2654435761 + b * 40503) >>> 0; return () => { h = (h ^ (h << 13)) >>> 0; h = (h ^ (h >>> 17)) >>> 0; h = (h ^ (h << 5)) >>> 0; return (h % 10000) / 10000; }; };
+export function poExperience(p, leagueIdx, yr) {
+  return (p.stats || []).filter(x => x.league === leagueIdx && x.yr < yr).reduce((a, x) => a + (x.playoffs || []).reduce((b, r) => b + (r.GP || 0), 0), 0);
+}
+export function riserCase(p, leagueIdx, yr) {
+  const tr = k => p.traits?.[k] || 0, why = [];
+  let score = 0;
+  const clu = (p.skills || []).find(x => x.id === 'CLU')?.level || 0;
+  if (clu > 0) { score += clu; why.push(`Clutch Gene${clu > 1 ? ` ${clu}` : ''}`); }
+  if (tr('winning') >= 16) { score += 1; why.push('Competitor'); }
+  if (tr('lockerRoom') >= 16) { score += 1; why.push('Leader'); }
+  if (tr('motor') >= 16) { score += 0.5; why.push('Relentless'); }
+  if (tr('playoffRiser') >= 16) { score += 0.5; why.push('Alpha'); }
+  if (p.age >= 28 && poExperience(p, leagueIdx, yr) >= 30) { score += 0.5; why.push('been here before'); }
+  if (score < 1) return null;
+  const lv = Math.min(5, Math.floor(score + hash(p.id, yr)() * 0.99));
+  return lv > 0 ? { lv, why } : null;
+}
+// Two rating points a level, round-robin over his three best skills (no higher than 20). Returns what moved.
+export function applyRise(p, lv) {
+  const at = k => p.attributes?.[k];
+  const keys = RISE_KEYS.filter(at).sort((a, b) => at(b)[0] - at(a)[0]).slice(0, 3), add = {};
+  const base = Object.fromEntries(keys.map(k => [k, [...at(k)]]));
+  let n = lv * 2;
+  for (let j = 0; n > 0 && j < 40; j++) {
+    const k = keys[j % keys.length], a = at(k);
+    if (a[0] >= 20) continue;
+    a[0]++; if (a[1] < a[0]) a[1] = a[0];
+    add[k] = (add[k] || 0) + 1; n--;
+  }
+  return { add, base };
+}
+// How much he keeps: his playoff production against his regular season (game score a game). Most keep none.
+export function riseKeep(p, leagueIdx, yr, points) {
+  const reg = seasonLine(p, leagueIdx, yr), po = seasonLine(p, leagueIdx, yr, 'playoffs');
+  if (!po || po.gp < 3 || !reg) return { keep: 0, po, reg, r: null };
+  const r = po.gs / Math.max(1, reg.gs);
+  const frac = r >= 1.2 ? 0.5 : r >= 1.05 ? 0.34 : r >= 0.95 ? 0.2 : 0;
+  return { keep: Math.round(points * frac), po, reg, r };
+}
+// The points he keeps, spread from his biggest gain down.
+export function keepSplit(add, keep) {
+  const out = Object.fromEntries(Object.keys(add).map(k => [k, 0]));
+  for (const [k, n] of Object.entries(add).sort((a, b) => b[1] - a[1])) { const d = Math.min(n, keep); out[k] = d; keep -= d; }
+  return out;
+}
+// Take the playoff points back off, down to what he keeps. Only a rating still sitting exactly where the playoffs put
+// it comes down (a raw file from the game), so loading the same file twice, or a later one, changes nothing.
+export function revertRise(p, x, keepK) {
+  let moved = false;
+  for (const [k, n] of Object.entries(x.add)) {
+    const a = p.attributes?.[k], [b0, b1] = x.base[k];
+    if (!a || a[0] !== b0 + n) continue;
+    const top = Math.max(b1, b0 + n);
+    a[0] = b0 + (keepK[k] || 0);
+    if (a[1] === top) a[1] = Math.max(b1, a[0]);
+    moved = true;
+  }
+  return moved;
+}
 export { playerName };

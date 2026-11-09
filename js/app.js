@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.320.7';
+const APP_VERSION = '0.322.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -842,6 +842,8 @@ async function loadFile(file) {
     const planned = !isCollege() && applyClassPlan();
     if (!isCollege() && settleRetirees(league())) state.dirty = true;
     if (!isCollege() && playoffRotations()) state.dirty = true;
+    if (!isCollege() && (applyRisers() + settleRisers())) state.dirty = true;
+    if (!isCollege() && stashReturn()) state.dirty = true;
     // Coaching changes land at the end of the season: every CPU chair filled before camp. Your own empty chair waits for you.
     if (!isCollege() && isComplete() && league().season.phase >= 2 && league().season.phase <= 6) {
       cpuCoachMoves();
@@ -1561,7 +1563,7 @@ const CALENDAR = [
     done: () => calFlags().dev },
   { key: 'media', date: 'Sep 28', title: 'Media Day', blurb: 'Jersey numbers, the season\'s top 10 storylines and the GM Survey.',
     done: () => calFlags().media },
-  { key: 'exhib', date: 'Oct 8', title: 'Preseason', blurb: 'Three exhibition games settle the camp battles; stash a rookie overseas or bring one home.',
+  { key: 'exhib', date: 'Oct 8', title: 'Preseason', blurb: 'Three exhibition games settle the camp battles.',
     done: () => !!calFlags().exhib || !!calFlags().cuts },
   { key: 'cuts', date: 'Oct 15', title: 'Roster Finalization', blurb: `Last call for one-year camp deals, then final cuts: every team gets down to ${FA.FA_DEFAULTS.seasonMax} before the season.`,
     done: () => !!calFlags().cuts },
@@ -4410,6 +4412,7 @@ function applyBump(seed) {
   setDevPlans({});   // no offseason focus: every player's points go where his game takes them
   const awards = runProgression(entries, { ...state.params, seed }, state.profiles[li]);
   state.potWhy = new Map(awards.why);
+  state.injCut = new Map(awards.injCut || []);
   { const all = glStore(), recs = all[lastSeasonYear()]; if (recs) { for (const [pid, r] of Object.entries(recs)) r.bumped = awards.gl.get(+pid) || 0; glSave(all); } }
   // A potential bump brings new ratings room with it, adding up to the new potential.
   if (state.params.dynamicCeilings !== false) for (const e of entries) potBumpCeilings(e.p, snapOf(e.p).pot);
@@ -4651,7 +4654,7 @@ function coachCard() {
   earnCoachPoints();
   const c = myCoach(), yr = league().season.currentYear, e = treeStore().earned[yr];
   return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>' + COIN_PINK + ' Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: 1 for completing a season, having a winning record, making the playoffs, a deep run, and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. Higher rated coaches may start with skills unlocked, and every upgrade stays with your franchise, even with a new coach.</p><p class="small muted">Coins (' + COIN_GOLD + ') are different: they buy arena upgrades.</p>')}<div class="stack">
-    <button class="drill-row tap" data-act="nav" data-to="coaches"><span class="grow"><b>${c ? esc(`${c.fn} ${c.ln}`) : 'Head coach'}</b><br><span class="muted small">Head coach · tap for his profile</span></span><span class="small">›</span></button>
+    <button class="drill-row tap" data-act="nav" ${c ? `data-to="coach" data-arg="${c.id}"` : 'data-to="coaches"'}><span class="grow"><b>${c ? esc(`${c.fn} ${c.ln}`) : 'Head coach'}</b><br><span class="muted small">Head coach · tap for his profile</span></span><span class="small">›</span></button>
     <p class="note small"><b class="gold">${tokTag(coachPoints())}</b> Franchise Tokens to spend${e ? ` · <span class="up">+${e.pts}</span> this offseason (${esc(e.why.map(earnWhy).join(', '))})` : ''}</p>
     <div class="branch-counts">${CO.BRANCHES.map(b => { const ns = CO.NODES[b.k] || []; return ns.length ? `<p class="note small muted">${b.icon} ${b.label} <b>${ns.filter(n => CO.nodeOwned(treeStore(), c, n, b.k)).length}/${ns.length}</b></p>` : ''; }).filter(Boolean).join('')}</div>
     <p class="note small" style="margin:4px 0 0"><b class="gold">Staff</b></p>
@@ -7801,7 +7804,15 @@ function longevityBadges(p, d, injury = true) {
   const why = POT_WHY[state.potWhy?.get(p.id)];
   return (d.regDelta ? `<span class="badge ${d.regDelta > 0 ? 'lvl' : 'down-b'}">${paused ? 'Regression paused' : `Regression age ${was}→${p.regressionAge}`}</span>` : '') +
     (d.potDelta > 0 ? '<span class="badge new">POT ▲</span>' : d.potDelta < 0 ? `<span class="badge down-b">POT ▼${why ? ` · ${why}` : ''}</span>` : '') +
-    (injury ? injuryBadge(p) : '');
+    (injury ? injuryBadge(p) : '') + injCutBadge(p);
+}
+// The injury took him under his own level: what it cost, and where he tops out now.
+function injCutBadge(p) {
+  const c = state.injCut?.get(p.id);
+  if (!c) return '';
+  const nm = { LAY: 'Layup', DNK: 'Dunk', INS: 'Inside', MID: 'Mid', TPT: '3PT', FTS: 'FT', DRB: 'Handle', PAS: 'Pass', ORE: 'O-Reb', DRE: 'D-Reb', STL: 'Steal', BLK: 'Block', STR: 'Strength', SPD: 'Speed', STM: 'Stamina' };
+  const bits = Object.entries(c.cuts).map(([k, n]) => `${nm[k] || k} ${n > 0 ? '−' : '+'}${Math.abs(n)}`);
+  return `<span class="badge down-b">${esc(c.part)}: Lv ${c.lv}→${c.lvNow}, capped at ${c.capLv} · ${esc(bits.join(', '))}${c.wt ? ` · ${c.wt} lb` : ''}</span>`;
 }
 
 actions.openPlayer = d => go('player', { id: +d.id });
@@ -8319,6 +8330,23 @@ function exitSettle(t) {
   }
   saveExit();
 }
+// The playoffs, as the exit interviews bring them up: how far the team went, and how each man played in them.
+const RUN_TXT = ['went out in the first round', 'went out in the second round', 'lost in the conference finals', 'lost in the Finals'];
+function exitRunLine(t, yr) {
+  const run = PO.runOf(league(), yr, t.id);
+  if (!run) return '';
+  const txt = !run.inIt ? 'missed the playoffs.' : run.champ ? 'won the title.' : `${RUN_TXT[Math.min(3, run.won)]}.`;
+  return `<p class="note small ${run.champ ? 'gold' : run.inIt ? '' : 'down'}">🏆 ${esc(t.shortName)} ${esc(txt)}</p>`;
+}
+function exitPoLine(p, yr) {
+  const l = seasonLine(p, state.leagueIdx, yr, 'playoffs'), reg = seasonLine(p, state.leagueIdx, yr);
+  const rs = riseStore()[yr], x = rs?.list?.[p.id], o = rs?.out?.[p.id];
+  if (!l) return '';
+  const r = reg ? l.gs / Math.max(1, reg.gs) : 1;
+  const read = r >= 1.15 ? 'he rose to it' : r >= 0.95 ? 'he held his level' : 'he wasn\'t himself';
+  const rise = x ? ` · 📈 +${x.lv} Lv riser${o ? (o.keep ? `, keeps +${o.keep} pts` : ', gave it back') : ''}` : '';
+  return `<br><span class="small">Playoffs: ${l.ppg.toFixed(1)} / ${l.rpg.toFixed(1)} / ${l.apg.toFixed(1)} in ${l.gp} games, ${esc(read)}${esc(rise)}</span>`;
+}
 function exitInterviewBox(t) {
   if (isCollege() || !isComplete()) return '';
   exitSettle(t);
@@ -8329,11 +8357,11 @@ function exitInterviewBox(t) {
   if (!cases.length && !judged.length) return '';
   const row = ({ p, topic }) => {
     const T = EXIT_TOPICS[topic], said = talks[p.id];
-    return `<div class="drill-row wrap"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)}<br><span class="small muted">${esc(T.ask)} · ${moraleTag(p)}</span></span>
+    return `<div class="drill-row wrap"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)}<br><span class="small muted">${esc(T.ask)} · ${moraleTag(p)}</span>${exitPoLine(p, yr)}</span>
       ${said ? `<p class="note small full ${said.ans === 'promise' ? 'gold' : 'muted'}">${said.ans === 'promise' ? `🤝 You promised: ${esc(T.promise)}. He'll hold you to it.` : `You told him: ${esc(T.honest)}.`}</p>`
         : `<span class="opt-btns full"><button class="btn small" data-act="exitAnswer" data-id="${p.id}" data-t="${t.id}" data-topic="${topic}" data-v="promise">🤝 ${esc(T.promise)}</button><button class="btn small off" data-act="exitAnswer" data-id="${p.id}" data-t="${t.id}" data-topic="${topic}" data-v="honest">${esc(T.honest)}</button></span>`}</div>`;
   };
-  return `<fieldset class="frame"><legend>Exit Interviews${league().teams.filter(isUserTeam).length > 1 ? ` · ${esc(t.shortName)}` : ''}</legend>${infoBtn('exitint', '<p class="small"><b>Exit interviews</b>: your key players tell you what they want before the summer starts.</p><p class="small">A promise lifts his morale now and is judged at next year\'s interviews. Kept, he\'s happier still. Broken, his morale drops hard and he can ask for a trade.</p><p class="small">The honest answer costs a little morale now (less for a humble player) and nothing later.</p>')}<div class="stack">
+  return `<fieldset class="frame"><legend>Exit Interviews${league().teams.filter(isUserTeam).length > 1 ? ` · ${esc(t.shortName)}` : ''}</legend>${infoBtn('exitint', '<p class="small"><b>Exit interviews</b>: your key players tell you what they want before the summer starts.</p><p class="small">A promise lifts his morale now and is judged at next year\'s interviews. Kept, he\'s happier still. Broken, his morale drops hard and he can ask for a trade.</p><p class="small">The honest answer costs a little morale now (less for a humble player) and nothing later.</p>')}<div class="stack">${exitRunLine(t, yr)}
     ${judged.map(([pid, x]) => { const p = t.roster.find(q => q.id === +pid); const ok = o.judged[`${yr - 1}:${pid}`] === 'kept'; return p ? `<p class="note small ${ok ? 'up' : 'down'}">${ok ? '✅' : '💔'} <b>${esc(playerName(p))}</b> ${esc(ok ? EXIT_TOPICS[x.topic].kept : EXIT_TOPICS[x.topic].broke)}.</p>` : ''; }).join('')}
     ${cases.map(row).join('')}
   </div></fieldset>`;
@@ -8669,6 +8697,7 @@ function playoffCard() {
   const L = league(), po = PO.thisPlayoffs(L), s = poState(), b = PO.bracketOdds(L);
   const fav = b ? [...b.teams].sort((x, y) => y.odds[3] - x.odds[3])[0] : null;
   return `<fieldset class="frame"><legend>🏆 The Playoffs</legend><p class="note small">The bracket is set: ${po.rounds[0].series.length * 2} teams.${fav ? ` ${esc(fav.t.shortName)} are the favorite (${Math.round(fav.odds[3] * 100)}%).` : ''}${s.pick != null ? ` Your pick: ${esc(L.teams.find(t => t.id === s.pick)?.shortName || '')}.` : ''}</p>
+    ${(() => { const mine = L.teams.filter(isUserTeam).flatMap(t => risersOf(L.season.currentYear, t.id)); return mine.length ? `<div class="stack">${mine.map(riseRow).join('')}</div>` : ''; })()}
     <button class="btn big focus" data-act="nav" data-to="playoffs">🏆 Playoff Check-in</button></fieldset>`;
 }
 const pct0 = v => `${v >= 0.995 ? '>99' : v < 0.005 ? '<1' : Math.round(v * 100)}%`;
@@ -8686,6 +8715,7 @@ screens.playoffs = () => {
     title: 'Playoffs',
     body: `<fieldset class="frame"><legend>First Round</legend>${series}</fieldset>
       ${mine.map(t => poTeamBox(t)).join('')}
+      ${risersBox(L)}
       ${me?.team ? `<p class="note small">Your own check-in (series preview, mindset, your agent) is on <button class="linkish" data-act="nav" data-to="career">your Career Hub</button>.</p>` : ''}
       <fieldset class="frame"><legend>Title Odds</legend><p class="note small">${s.pick == null ? 'Pick your champion: call it right and collect 100 coins.' : `You picked ${esc(L.teams.find(t => t.id === s.pick)?.shortName || '')}. It pays 100 coins if they win it all.`}</p><div class="stack">${oddsRows}</div></fieldset>
       ${poAwardsBox()}`,
@@ -8748,6 +8778,73 @@ actions.poRot = d => {
   }
   poSave(s); state.dirty = true; render();
 };
+// Playoff risers (playoffs.js): a file loaded before game 1 lifts the players built for the playoffs, up to five levels,
+// for the run only. Skip the playoff check-in (load the offseason file instead) and nothing happens. The next offseason
+// file takes most of it back; he keeps a share if he played up to it.
+const riseKey = () => `hlc:rise:${saveTag()}`;
+function riseStore() { try { return JSON.parse(localStorage.getItem(riseKey())) || {}; } catch { return {}; } }
+function riseSave(v) { try { localStorage.setItem(riseKey(), JSON.stringify(v)); } catch { /* ignore */ } }
+function applyRisers() {
+  const L = league();
+  if (!PO.atPlayoffStart(L)) return 0;
+  const yr = L.season.currentYear, all = riseStore(), cur = (all[yr] ||= { list: {} });
+  const ids = new Set((PO.thisPlayoffs(L).rounds[0].series || []).flatMap(x => [x.topSeed, x.lowerSeed]));
+  let n = 0;
+  for (const t of L.teams.filter(t => ids.has(t.id))) for (const p of FA.signedRoster(t)) {
+    const was = cur.list[p.id];
+    // Already on him (a file the app wrote at this check-in): leave it.
+    if (was && Object.entries(was.add).every(([k, v]) => p.attributes[k]?.[0] === was.base[k][0] + v)) continue;
+    const l = seasonLine(p, state.leagueIdx, yr);
+    const c = l && l.mpg >= 10 ? PO.riserCase(p, state.leagueIdx, yr) : null;
+    if (!c) { delete cur.list[p.id]; continue; }
+    const lv0 = levelOf(p), r = PO.applyRise(p, c.lv);
+    if (!Object.keys(r.add).length) continue;
+    cur.list[p.id] = { tid: t.id, lv: c.lv, why: c.why, add: r.add, base: r.base, lv0, lv1: levelOf(p) };
+    n++;
+  }
+  riseSave(all);
+  return n;
+}
+function settleRisers() {
+  const L = league(), all = riseStore(), notes = [];
+  let n = 0;
+  for (const [yk, cur] of Object.entries(all)) {
+    const yr = +yk;
+    if (yr >= L.season.currentYear) continue;
+    const fresh = !cur.out;
+    cur.out ||= {};
+    for (const [pid, x] of Object.entries(cur.list || {})) {
+      const e = findPlayer(+pid);
+      if (!e || e.hof) continue;
+      if (!cur.out[pid]) {
+        const pts = Object.values(x.add).reduce((a, v) => a + v, 0), k = PO.riseKeep(e.p, state.leagueIdx, yr, pts);
+        cur.out[pid] = { keep: k.keep, keepK: PO.keepSplit(x.add, k.keep), gp: k.po?.gp || 0, ppg: k.po ? +k.po.ppg.toFixed(1) : 0, r: k.r == null ? null : +k.r.toFixed(2) };
+      }
+      const o = cur.out[pid];
+      if (PO.revertRise(e.p, x, o.keepK)) {
+        n++;
+        o.lv = levelOf(e.p);
+        if (fresh && e.team && isUserTeam(e.team)) notes.push(`${playerName(e.p)}: ${o.keep ? `keeps +${o.keep} from his run (Lv ${o.lv})` : `back to Lv ${o.lv}`}`);
+      }
+    }
+  }
+  riseSave(all);
+  if (notes.length) setTimeout(() => toast('📈 Playoff risers come back down', notes.join(' · '), 7000), 2200);
+  return n;
+}
+// This spring's risers (or a past spring's, with what each kept).
+const risersOf = (yr, tid = null) => Object.entries(riseStore()[yr]?.list || {}).filter(([, x]) => tid == null || x.tid === tid)
+  .map(([pid, x]) => ({ pid: +pid, ...x, out: riseStore()[yr]?.out?.[pid] || null, e: findPlayer(+pid) })).filter(x => x.e)
+  .sort((a, b) => b.lv - a.lv || b.lv1 - a.lv1);
+const riseRow = x => `<p class="note small" style="margin:0">📈 <b class="tap" data-act="openPlayer" data-id="${x.pid}">${esc(playerName(x.e.p))}</b> <span class="up">+${x.lv} Lv</span> <span class="muted">(${x.lv0}→${x.lv1})</span> · <span class="small muted">${esc(x.why.join(', '))}</span></p>`;
+function risersBox(L = league()) {
+  const yr = L.season.currentYear, rs = risersOf(yr);
+  if (!rs.length) return '';
+  const teams = L.teams.filter(t => rs.some(x => x.tid === t.id)).sort((a, b) => isUserTeam(b) - isUserTeam(a) || a.shortName.localeCompare(b.shortName));
+  return `<fieldset class="frame"><legend>📈 Playoff Risers</legend>${infoBtn('risers', '<p class="small"><b>Playoff risers</b>: players built for this time of year play above themselves in the playoffs, up to five levels: Clutch Gene (a level for each skill level), a Competitor, a Leader, a Relentless motor, an Alpha who wants the ball, and veterans who have been here before.</p><p class="small">It lasts for the playoffs only. When the next offseason file comes in, most of it goes away: a player who played up to it keeps a share.</p>')}
+    <div class="stack">${teams.map(t => `<h4 class="ov-h ${isUserTeam(t) ? 'gold' : ''}">${logoImg(t)} ${esc(t.shortName)}</h4>${rs.filter(x => x.tid === t.id).map(riseRow).join('')}`).join('')}</div></fieldset>`;
+}
+
 // Settle last spring's picks and the owner's targets once the next offseason comes in.
 function poSettle() {
   const L = league(), y = L.season.currentYear - 1, s = poState(y);
@@ -9994,7 +10091,7 @@ function playerTags(p) {
 }
 // A Hall of Famer: the same profile as an active player, read-only, with the whole career.
 // A retired player's report reads in the past tense: "He threw lobs, put his body on the line and looked to set teammates up."
-const PAST = { brings: 'brought', delivers: 'delivered', is: 'was', has: 'had', can: 'could', "won't": "wouldn't", "doesn't": "didn't", "isn't": "wasn't", lives: 'lived', gets: 'got', finishes: 'finished', pulls: 'pulled', wants: 'wanted',
+const PAST = { brings: 'brought', delivers: 'delivered', forces: 'forced', settles: 'settled', dribbles: 'dribbled', bites: 'bit', gambles: 'gambled', is: 'was', has: 'had', can: 'could', "won't": "wouldn't", "doesn't": "didn't", "isn't": "wasn't", lives: 'lived', gets: 'got', finishes: 'finished', pulls: 'pulled', wants: 'wanted',
   creates: 'created', looks: 'looked', catches: 'caught', throws: 'threw', scores: 'scored', crashes: 'crashed', goes: 'went', jumps: 'jumped', pokes: 'poked', stands: 'stood',
   puts: 'put', gives: 'gave', makes: 'made', feeds: 'fed', keeps: 'kept', clamps: 'clamped', locks: 'locked', wins: 'won', plays: 'played', snatches: 'snatched', sparks: 'sparked',
   bullies: 'bullied', leaves: 'left', seems: 'seemed', misses: 'missed', follows: 'followed', stays: 'stayed', coasts: 'coasted', stops: 'stopped', sets: 'set', takes: 'took',
@@ -13511,9 +13608,9 @@ actions.liveChoose = () => {
       makeSelection(live, order, idx, p.id);
       state.pickReveal = [o.overall];
       // The fans read the pick against the consensus board: a slide is a steal, a jump is a reach. They aren't always right.
-      if (cons - o.overall <= -6 && o.overall <= 30) fanEvent(o.owner, o.overall <= 10 ? 3 : 2, `${playerName(p)} fell to #${o.overall}`);
-      else if (cons - o.overall >= 10 && o.overall <= 30) fanEvent(o.owner, o.overall <= 10 ? -3 : -2, `reached for ${playerName(p)} at #${o.overall}`);
-      else if (o.overall <= 3 && (p.pot || 0) >= 9) fanEvent(o.owner, 2, `${playerName(p)} at #${o.overall}`);
+      if (cons - o.overall <= -6 && o.overall <= 30) fanEvent(o.owner, o.overall <= 10 ? 6 : 4, `${playerName(p)} fell to #${o.overall}`);
+      else if (cons - o.overall >= 10 && o.overall <= 30) fanEvent(o.owner, o.overall <= 10 ? -6 : -4, `reached for ${playerName(p)} at #${o.overall}`);
+      else if (o.overall <= 3 && (p.pot || 0) >= 9) fanEvent(o.owner, 5, `${playerName(p)} at #${o.overall}`);
     }
     box.remove();
     render();
@@ -15737,6 +15834,7 @@ screens.options = () => {
     title: 'Options Deadline',
     body: `<p class="note small">Accept a team option to keep his last year at the same salary, or decline it to let him go. Picked-up options can be extended right after, in the extension window.</p>
       ${careerTeamNow() ? viewOnlyNote() : ''}${uiTabs('options', [
+        ...(stashBackCard() ? [['gl', 'G League', stashBackCard()]] : []),
         ...(rookieDealsCard() ? [['rookies', 'Rookies', rookieDealsCard()]] : []),
         ['team', 'Team', `      <fieldset class="frame"><legend>Your Team Options</legend><div class="stack">${myTeamOpts.map(x => { const deal = st.deals?.[x.p.id], neg = st.neg?.[x.p.id]; return `<div class="drill-row wrap">${head(x)}
         <span class="opt-btns full">${btn('optTeam', x.p.id, 'ex', x.c.choice === 'ex', 'Accept')}${btn('optTeam', x.p.id, 'dec', x.c.choice === 'dec', 'Decline')}</span>
@@ -16112,10 +16210,11 @@ function fanEvent(team, delta, why = '') {
   try { localStorage.setItem(fanLogKey(), JSON.stringify([...fanLog(), { tid: team.id, yr: league().season.currentYear, d, why }].slice(-200))); } catch { /* ignore */ }
   toast(`📣 ${team.shortName} fans ${d > 0 ? '+' : ''}${d}`, why || 'The crowd noticed.', 2600);
 }
-const fanGain = p => { const lv = shownLevel(p); const g = lv >= 92 ? 6 : lv >= 88 ? 4 : lv >= 84 ? 3 : lv >= 80 ? 2 : lv >= 76 ? 1 : 0; return g && p.age <= 24 && p.pot >= 9 ? g + 1 : g; };
+// Offseason moves are what fans talk about all summer: a star coming or going moves the crowd a lot.
+const fanGain = p => { const lv = shownLevel(p); const g = lv >= 92 ? 12 : lv >= 88 ? 9 : lv >= 84 ? 6 : lv >= 80 ? 4 : lv >= 76 ? 2 : lv >= 72 ? 1 : 0; return g && p.age <= 24 && p.pot >= 9 ? g + 2 : g; };
 function tradeMorale(L, p, to, from) {
   fanEvent(to, fanGain(p), `traded for ${playerName(p)}`);
-  if (from) fanEvent(from, -Math.round(fanGain(p) * 0.6), `traded away ${playerName(p)}`);
+  if (from) fanEvent(from, -Math.round(fanGain(p) * 0.75), `traded away ${playerName(p)}`);
   let n = 7;
   const l = seasonLine(p, state.leagueIdx, lastSeasonYear());
   if (roleRank(to, p) <= 5 && (!l || l.mpg < 24)) n += 5;
@@ -16124,9 +16223,9 @@ function tradeMorale(L, p, to, from) {
 }
 function contractMorale(p, team, old) {
   const moved = old && old.id !== team.id;
-  if (moved) { fanEvent(team, fanGain(p), `signed ${playerName(p)}`); fanEvent(old, -Math.round(fanGain(p) * 0.6), `lost ${playerName(p)} in free agency`); }
+  if (moved) { fanEvent(team, fanGain(p), `signed ${playerName(p)}`); fanEvent(old, -Math.round(fanGain(p) * 0.75), `lost ${playerName(p)} in free agency`); }
   else if (!old) fanEvent(team, Math.ceil(fanGain(p) / 2), `signed ${playerName(p)}`);
-  else if (fanGain(p) >= 3) fanEvent(team, 1, `kept ${playerName(p)}`);
+  else if (fanGain(p) >= 4) fanEvent(team, Math.ceil(fanGain(p) / 3), `kept ${playerName(p)}`);
   moraleEvent(p, `deal:${team.id}`, 8 + (moved ? 4 : 0), moved ? `signed with ${team.shortName}` : 'new contract');
 }
 // Final cuts: a player who's now a projected starter after sitting last year
@@ -18684,6 +18783,7 @@ screens.cuts = () => {
     body: `${careerTeamNow() ? viewOnlyNote() : ''}${myTeam() && alphaClash(myTeam()) ? `<p class="note small gold">${esc(alphaClash(myTeam()))}</p>` : ''}<p class="note small">Teams could carry up to ${O.rosterMax} through the summer. Opening night rosters max out at ${O.seasonMax}; cut players go to free agency.</p>
       ${uiTabs('cuts', [
         ['mine', 'Your Cuts', `      ${requestCard()}
+      ${mine.map(stashBox).join('')}
       ${myCards}
       ${done ? waiverBox() : ''}`, mine.some(t => cutsShort(t, sel) > 0)],
         ...(done ? [['league', 'Around the League', `      <fieldset class="frame"><legend>Around the League</legend>${done && log ? `<div class="stack">${log.list.map(x => `<p class="note small"><b>${esc(x.team)}</b>${x.names.length ? ` cut ${esc(x.names.join(', '))}` : ''}${x.bought?.length ? `${x.names.length ? '; ' : ' '}bought out ${esc(x.bought.join(', '))}` : ''}</p>`).join('') || '<p class="note small muted">No cuts needed.</p>'}${(calFlags().waiverLog || []).length ? `<p class="note small"><b>Off the waiver wire</b> ${esc(calFlags().waiverLog.map(x => `${x.team} signed ${x.name} (Lv ${x.lv})`).join(' · '))}</p>` : ''}</div>`
@@ -18814,80 +18914,112 @@ function campBox(t) {
   </div></fieldset>`;
 }
 actions.campPlay = d => { const t = league().teams.find(x => x.id === +d.t); if (t) { campPlay(t); render(); } };
-// Draft-and-stash: before the cuts, a rookie you just drafted can play overseas instead. He leaves the roster and
-// the books (the app keeps him), grows each year away, and comes over at the cuts of a later offseason on a minimum
-// deal, or you let his rights go and he joins free agency.
+// G League stash: at the final cuts, send up to 3 young players down for the season instead of cutting them. He comes
+// off the roster (the game never sees him; the app keeps him), spends the year developing, and is back on the team
+// when the next offseason file comes in, a year older and better: how much better depends on his age, his draft
+// pedigree, his college production and his frame. Then the Contracts step asks: keep him or let him go.
+// Who can go: under contract for at least two more years, with 0 or 1 seasons in the league.
 const stashKey = () => `hlc:stash:${saveTag()}`;
 function stashList() { try { return JSON.parse(localStorage.getItem(stashKey())) || []; } catch { return []; } }
-function stashSave(v) { try { localStorage.setItem(stashKey(), JSON.stringify(v)); } catch { toast('Couldn\'t save the stash', 'Browser storage is full', 3000, true); } }
-const STASH_MAX = 2;
+function stashSave(v) { try { localStorage.setItem(stashKey(), JSON.stringify(v)); } catch { toast('Couldn\'t save the G League list', 'Browser storage is full', 3000, true); } }
+const STASH_MAX = 3;
+const proSeasons = p => (p.stats || []).filter(x => x.league === state.leagueIdx && x.yr < league().season.currentYear && (x.season || []).some(r => r.GP > 0)).length;
+const stashable = p => p.status === FA.STATUS_SIGNED && (p.contract?.yrs || 0) >= 2 && proSeasons(p) <= 1;
+// Development points for a year down there: youth first, then pedigree, college production and frame.
+function stashPts(p) {
+  const age = p.age <= 19 ? 5 : p.age <= 20 ? 4 : p.age <= 21 ? 3 : p.age <= 22 ? 2 : 1;
+  const c = collegeLine(p, state.data.seasonLeagues), prod = c ? Math.min(2, Math.max(0, (c.pts + 0.7 * c.reb + 0.7 * c.ast - 8) / 8)) : 0.5;
+  return Math.round(age + pedigree(p) * 3 + prod + frameRoom(p) * 2);
+}
 function stashBox(t) {
-  if (isCollege() || calFlags().cuts) return '';
-  const L = league(), yr = L.season.currentYear, rk = rookieIds();
-  const away = stashList().filter(x => x.tid === t.id);
-  const can = away.filter(x => x.yr === yr).length < STASH_MAX;
-  const rookies = can ? FA.signedRoster(t).filter(p => rk.has(p.id)).sort((a, b) => shownLevel(a) - shownLevel(b)) : [];
-  if (!away.length && !rookies.length) return '';
-  const lv = x => Math.round(levelOf(x.player));
-  return `<fieldset class="frame"><legend>Draft-and-Stash${L.teams.filter(isUserTeam).length > 1 ? ` · ${esc(t.shortName)}` : ''}</legend>${infoBtn('stash', '<p class="small"><b>Draft-and-stash</b>: send a rookie you just drafted overseas. He comes off your roster and your books; the app holds his rights.</p><p class="small">He develops each year away. At the cuts of a later offseason you can bring him over on a minimum deal, or let his rights go (he becomes a free agent).</p><p class="small muted">Up to ' + STASH_MAX + ' a summer.</p>')}<div class="stack">
-    ${away.map(x => { const n = yr - x.yr; return `<div class="drill-row wrap"><span class="grow"><b>${esc(playerName(x.player))}</b> <span class="gold">Lv ${lv(x)}</span><br><span class="small muted">${esc(posName(x.player))} · stashed ${x.yr}${n ? ` · ${n} year${n > 1 ? 's' : ''} away` : ' · this summer'}</span></span>
-      ${n ? `<span class="opt-btns full"><button class="btn small focus" data-act="stashBring" data-id="${x.player.id}">✈️ Bring him over</button><button class="btn small off" data-act="stashDrop" data-id="${x.player.id}">Let his rights go</button></span>` : `<span class="opt-btns full"><button class="btn small off" data-act="stashUndo" data-id="${x.player.id}">↺ Keep him here</button></span>`}</div>`; }).join('')}
-    ${rookies.map(p => `<div class="drill-row"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)}<br><span class="small muted">${esc(posName(p))} · ${p.age}y · $${p.contract?.sal || 0}M × ${p.contract?.yrs || 0}</span></span><button class="btn small" data-act="stashSend" data-id="${p.id}">🌍 Stash</button></div>`).join('')}
+  if (isCollege() || CAR.isCareer(league())) return '';
+  const L = league(), yr = L.season.currentYear, done = !!calFlags().cuts;
+  const away = stashList().filter(x => x.tid === t.id && x.yr === yr);
+  const room = !done && away.length < STASH_MAX;
+  const ok = room ? FA.signedRoster(t).filter(stashable).sort((a, b) => a.age - b.age || shownLevel(b) - shownLevel(a)) : [];
+  if (!away.length && !ok.length) return '';
+  return `<fieldset class="frame"><legend>G League · ${away.length}/${STASH_MAX}</legend>${infoBtn('stash', '<p class="small"><b>The G League</b>: send a young player down for the season instead of cutting him. He comes off your roster (and out of the game), and the app keeps him.</p><p class="small">He\'s back on your team when the next offseason file comes in, a year older and better. Younger players, higher picks, productive college players and players with a frame to fill out grow the most. At the Contracts step you decide: keep him or let him go.</p><p class="small muted">Up to ' + STASH_MAX + '. Under contract at least two more years, with 0 or 1 seasons in the league.</p>')}<div class="stack">
+    ${!done ? `<p class="note small muted">Send a player down to clear a roster spot instead of cutting him.</p>` : ''}
+    ${away.map(x => `<div class="drill-row"><span class="grow"><b>${esc(playerName(x.player))}</b> <span class="gold">Lv ${levelOf(x.player)}</span><br><span class="small muted">${esc(posName(x.player))} · ${x.player.age}y · in the G League this season</span></span>${done ? '' : `<button class="btn small off" data-act="stashUndo" data-id="${x.player.id}">↺ Bring back</button>`}</div>`).join('')}
+    ${ok.map(p => `<div class="drill-row"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)} ${potStars(p)}<br><span class="small muted">${esc(posName(p))} · ${p.age}y · ${proSeasons(p) ? '2nd year' : 'rookie'} · $${p.contract?.sal || 0}M × ${p.contract?.yrs || 0}</span></span><button class="btn small" data-act="stashSend" data-id="${p.id}">⬇️ Send down</button></div>`).join('')}
   </div></fieldset>`;
 }
 actions.stashSend = async d => {
   const L = league(), t = L.teams.find(x => isUserTeam(x) && x.roster.some(p => p.id === +d.id)), p = t?.roster.find(x => x.id === +d.id);
-  if (!p || !(await confirmBox(`Stash <b>${esc(playerName(p))}</b> overseas? He leaves your roster and your books. Bring him over at the cuts of a later summer.`, 'Stash'))) return;
-  const yr = L.season.currentYear, copy = JSON.parse(JSON.stringify(p));   // as he was, for an undo this summer
-  FA.releasePlayer(L, t, p);
-  L.freeAgents.splice(L.freeAgents.indexOf(p), 1);
-  stashSave([...stashList(), { tid: t.id, yr, player: copy }]);
+  if (!p || !stashable(p) || stashList().filter(x => x.tid === t.id && x.yr === L.season.currentYear).length >= STASH_MAX) return;
+  if (!(await confirmBox(`Send <b>${esc(playerName(p))}</b> to the G League for the season? He comes off your roster and is back next offseason.`, 'Send Down'))) return;
+  const copy = JSON.parse(JSON.stringify(p));   // as he was, for an undo this summer
+  t.roster.splice(t.roster.indexOf(p), 1);
+  if (Array.isArray(t.startingLineup)) t.startingLineup = t.startingLineup.filter(e => e.pid !== p.id);
+  stashSave([...stashList(), { tid: t.id, yr: L.season.currentYear, player: copy }]);
   delete cutSel()[p.id];
   state.dirty = true; render();
-  toast(`🌍 ${playerName(p)} stashed overseas`, 'Off the roster and the books');
+  toast(`⬇️ ${playerName(p)} sent to the G League`, 'Back on your team next offseason');
 };
-// Put a stashed player back into the league as a free agent (his rights let go, or undone the same summer).
-function stashOut(id) {
-  const list = stashList(), x = list.find(y => y.player.id === +id);
-  if (!x) return null;
-  const L = league(), p = x.player, n = L.season.currentYear - x.yr;
-  p.age += n;
-  p.status = FA.STATUS_FREE; p.tid = 0; p.linePos = -1;
-  L.freeAgents.push(p);
-  stashSave(list.filter(y => y !== x));
-  // Each year away: a season of growth overseas (points spent for him).
-  for (let i = 0; i < n; i++) {
-    const aw = runProgression([{ p, team: null, leagueIdx: state.leagueIdx, spend: true, glPts: 6 }], { ...state.params, seed: (saveSalt() ^ Math.imul(p.id + i, 2654435761)) >>> 0 }, state.profiles[state.leagueIdx]);
-    void aw;
-  }
-  state.dirty = true;
-  return { x, p, n };
-}
-// Changed your mind the same summer: he's back on the roster just as he was.
+// Changed your mind before the cuts: he's back on the roster just as he was.
 actions.stashUndo = d => {
   const L = league(), list = stashList(), x = list.find(y => y.player.id === +d.id && y.yr === L.season.currentYear), t = x && L.teams.find(y => y.id === x.tid);
-  if (!t) return;
+  if (!t || calFlags().cuts) return;
   t.roster.push(x.player);
   stashSave(list.filter(y => y !== x));
   state.dirty = true; render();
 };
-actions.stashBring = d => {
-  const L = league(), x = stashList().find(y => y.player.id === +d.id), t = x && L.teams.find(y => y.id === x.tid);
-  if (!t) return;
-  if (FA.signedRoster(t).length >= FA.FA_DEFAULTS.rosterMax) { toast('No open roster spot', '', 2400, true); return; }
-  const r = stashOut(d.id), sal = FA.minFor(r.p);
-  (calFlags().stashBack ||= []).push(r.p.id);
-  FA.signPlayer(L, r.p, t, { sal, yrs: 2, opt: 0 }, L.season.currentDay || 3);
-  lockSigning(r.p, 'Came over from overseas');
-  render();
-  toast(`✈️ ${playerName(r.p)} comes over`, `Lv ${shownLevel(r.p)} after ${r.n} year${r.n > 1 ? 's' : ''} away · $${sal}M × 2`);
-};
-actions.stashDrop = async d => {
-  const x = stashList().find(y => y.player.id === +d.id);
-  if (!x || !(await confirmBox(`Let <b>${esc(playerName(x.player))}</b>'s rights go? He becomes a free agent.`, 'Let Go'))) return;
-  const r = stashOut(d.id);
-  render();
-  toast(`${playerName(r.p)} is a free agent`);
+// The next offseason file: everyone down there comes back to his team, a year on. Loading that file again puts him
+// back again (the game never had him), as he came back the first time.
+function stashReturn() {
+  const L = league(), yr = L.season.currentYear, ph = L.season.phase, list = stashList(), notes = [];
+  state.stashProfs = null;
+  if (isCollege() || ph === 9 || ph === 11) return 0;
+  let n = 0;
+  for (const x of list) {
+    if (x.yr >= yr) continue;
+    const t = L.teams.find(y => y.id === x.tid);
+    if (!t) continue;
+    if (!x.back) {
+      const profs = () => (state.stashProfs ||= buildSkillProfiles(leaguePlayers(L, true).map(e => e.p)));
+      const p = x.player, k = yr - x.yr, lv0 = levelOf(p);
+      p.age += k;
+      if (p.contract) p.contract.yrs = Math.max(1, (p.contract.yrs || 1) - k);
+      Object.assign(p, { status: FA.STATUS_SIGNED, tid: t.id, linePos: -1 });
+      const pts = [];
+      for (let i = 0; i < k; i++) {
+        const g = stashPts(p); pts.push(g);
+        runProgression([{ p, team: null, leagueIdx: state.leagueIdx, spend: true, glPts: g }], { ...state.params, seed: (saveSalt() ^ Math.imul(p.id + i, 2654435761)) >>> 0 }, profs());
+      }
+      x.back = { yr, lv0, lv1: levelOf(p), pts: pts.reduce((a, v) => a + v, 0), player: JSON.parse(JSON.stringify(p)) };
+      if (isUserTeam(t)) notes.push(`${playerName(p)} Lv ${lv0}→${x.back.lv1}`);
+    }
+    if (x.back.yr !== yr || findPlayer(x.back.player.id)) continue;
+    const p = JSON.parse(JSON.stringify(x.back.player));
+    if (x.back.decided === 'cut') { Object.assign(p, { status: FA.STATUS_FREE, tid: 0 }); L.freeAgents.push(p); }
+    else t.roster.push(p);
+    n++;
+  }
+  stashSave(list);
+  if (notes.length) setTimeout(() => toast('⬆️ Back from the G League', `${notes.join(' · ')}. Keep him or let him go at the Contracts step.`, 7000), 1800);
+  return n;
+}
+// The Contracts step: keep him on his deal, or let him go (a G League contract: nothing stays on the books).
+const stashBack = () => stashList().filter(x => x.back && x.back.yr === league().season.currentYear && isUserTeam(league().teams.find(t => t.id === x.tid) || {}));
+function stashBackCard() {
+  const list = stashBack();
+  if (!list.length) return '';
+  return `<fieldset class="frame"><legend>Back from the G League</legend><div class="stack">${list.map(x => {
+    const e = findPlayer(x.player.id), p = e?.p || x.back.player, d = x.back.decided;
+    return `<div class="drill-row wrap"><span class="grow"><b class="tap" data-act="openPlayer" data-id="${p.id}">${esc(playerName(p))}</b> ${lvTag(p)} ${potStars(p)}<br><span class="small muted">${esc(posName(p))} · ${p.age}y · $${p.contract?.sal || 0}M × ${p.contract?.yrs || 0} · <span class="up">Lv ${x.back.lv0}→${x.back.lv1}</span> in the G League</span></span>
+      ${d ? `<p class="note small full ${d === 'keep' ? 'up' : 'muted'}">${d === 'keep' ? '✓ Keeping him.' : 'Let go: he\'s a free agent.'}</p>` : `<span class="opt-btns full"><button class="btn small focus" data-act="stashKeep" data-id="${p.id}" data-v="keep">Keep him</button><button class="btn small off" data-act="stashKeep" data-id="${p.id}" data-v="cut">Let him go</button></span>`}</div>`;
+  }).join('')}</div></fieldset>`;
+}
+actions.stashKeep = async d => {
+  const list = stashList(), x = list.find(y => y.back && y.player.id === +d.id), e = findPlayer(+d.id);
+  if (!x || x.back.decided) return;
+  if (d.v === 'cut') {
+    if (!(await confirmBox(`Let <b>${esc(playerName(x.back.player))}</b> go? He becomes a free agent; nothing stays on your books.`, 'Let Go'))) return;
+    if (e?.team) FA.releasePlayer(league(), e.team, e.p);
+  }
+  x.back.decided = d.v;
+  stashSave(list);
+  state.dirty = true; render();
 };
 // The calendar days for the newer offseason pieces: each gathers its cards and a wrap-up.
 const myTeamsNow = () => league().teams.filter(isUserTeam);
@@ -18923,7 +19055,7 @@ screens.medical = () => layout({
 });
 screens.exhib = () => layout({
   title: 'Preseason',
-  body: myTeamsNow().map(t => campBox(t) + stashBox(t)).join('') || '<p class="note">No camp battles or rookies to stash.</p>',
+  body: myTeamsNow().map(t => campBox(t)).join('') || '<p class="note">No camp battles.</p>',
   action: isStep('exhib') ? { act: 'stepWrap', k: 'exhib', label: 'On to Final Cuts' } : null,
 });
 // Opening-night minutes and morale (Complete rules, once a season a team): a 3.5★+ player more than 4 minutes under

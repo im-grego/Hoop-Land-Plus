@@ -5,7 +5,7 @@
 
 import { secsOf } from './gameclock.js';
 import { coachMult, durMult, durLongevity } from './traits.js';
-import { ATTRS, ATTR_MAX, SKILL_MAX_LEVEL, CATEGORIES, POT_MIN, POT_MAX, MINOR_INJURY, lastSeasonMpg, activeSkills, isLeveled, injuryHistory, injuryPart, canGrow, growthRoom } from './savefile.js';
+import { ATTRS, ATTR_MAX, SKILL_MAX_LEVEL, CATEGORIES, POT_MIN, POT_MAX, MINOR_INJURY, lastSeasonMpg, activeSkills, isLeveled, injuryHistory, injuryPart, canGrow, growthRoom, potCap, levelOf } from './savefile.js';
 
 // Categories the bump awards points in (Physical is left alone).
 export const AWARD_CATEGORIES = [0, 1, 2, 3];
@@ -516,6 +516,53 @@ export function maybeInjuryPotLoss(p, year, params, rng, mult = 1) {
   return true;
 }
 
+// When an injury takes his potential below where he already plays, the body pays too: a few rating points come off
+// in the parts of his game the injury touches, and his ceilings close down to the new potential (he can't grow back
+// past it). Legs: lift, rebounding and speed. Fingers, hands, wrists: the jumper. The back: dunking and strength.
+// A big man (SF to C) coming off a leg injury sometimes drops weight instead and comes back a step quicker.
+const INJ_KEYS = {
+  Toe: ['SPD', 'DNK', 'LAY'], Foot: ['DNK', 'SPD', 'ORE'], Ankle: ['DNK', 'SPD', 'DRB'], Achilles: ['DNK', 'SPD', 'ORE', 'DRE'],
+  Calf: ['DNK', 'SPD', 'ORE'], Hamstring: ['DNK', 'SPD', 'ORE', 'DRE'], Thigh: ['DNK', 'ORE', 'DRE'],
+  ACL: ['DNK', 'SPD', 'ORE', 'DRE'], MCL: ['DNK', 'SPD', 'DRE'], Knee: ['DNK', 'SPD', 'ORE', 'DRE'],
+  Thumb: ['MID', 'TPT', 'FTS'], Finger: ['MID', 'TPT', 'FTS'], Hand: ['MID', 'TPT', 'FTS', 'DRB'], Wrist: ['TPT', 'MID', 'FTS'],
+  Elbow: ['MID', 'TPT', 'FTS'], Shoulder: ['TPT', 'STR', 'BLK'],
+  Back: ['DNK', 'STR', 'ORE'], Hip: ['SPD', 'DNK', 'LAY'], Groin: ['SPD', 'DNK', 'LAY'], Abs: ['STR', 'STM', 'DNK'], Head: ['PAS', 'DRE', 'STL'],
+};
+const LEG = ['Toe', 'Foot', 'Ankle', 'Achilles', 'Calf', 'Hamstring', 'Thigh', 'ACL', 'MCL', 'Knee'];
+export function injuryRatingCut(p, inj, rng) {
+  const cap = potCap(p), at = k => p.attributes?.[k];
+  const now = () => SKILL_KEYS_CUT.reduce((a, k) => a + (at(k)?.[0] ?? 0), 0);
+  if (now() <= cap) return null;
+  const part = injuryPart(inj) || '', keys = (INJ_KEYS[part] || ['DNK', 'SPD', 'DRE']).filter(k => at(k));
+  const big = p.pos >= 4 && LEG.includes(part) && rng() < 0.4;
+  const out = { part, lv: levelOf(p), cuts: {}, wt: 0 };
+  // 3 to 5 points, round-robin over the parts it hit, never under 1; a big who slims down keeps his speed.
+  // Skill points (what his level reads), plus a point off the body (speed, strength, stamina) where it was hit.
+  const n = 3 + Math.floor(rng() * 3), pool = keys.filter(k => SKILL_KEYS_CUT.includes(k));
+  if (!pool.length) pool.push('DNK', 'DRE');
+  for (let i = 0, j = 0; i < n && j < n * 3; j++) {
+    const k = pool[j % pool.length], a = at(k);
+    if (!a || a[0] <= 1) continue;
+    a[0]--; out.cuts[k] = (out.cuts[k] || 0) + 1; i++;
+  }
+  const body = keys.find(k => !SKILL_KEYS_CUT.includes(k) && !(big && k === 'SPD'));
+  if (body && at(body)[0] > 1) { at(body)[0]--; out.cuts[body] = 1; }
+  if (big && at('SPD') && at('SPD')[0] < ATTR_MAX) { const lb = 6 + Math.floor(rng() * 7); p.wt = Math.max(170, (p.wt || 230) - lb); out.wt = -lb; at('SPD')[0]++; out.cuts.SPD = (out.cuts.SPD || 0) - 1; }
+  // Ceilings close down to his new potential: first the room above his ratings, never below where he plays.
+  let over = SKILL_KEYS_CUT.reduce((a, k) => a + (at(k)?.[1] ?? 0), 0) - cap;
+  for (const k of [...keys.filter(k => SKILL_KEYS_CUT.includes(k)), ...SKILL_KEYS_CUT]) {
+    const a = at(k);
+    if (over <= 0) break;
+    if (!a) continue;
+    const d = Math.min(over, Math.max(0, a[1] - a[0]));
+    a[1] -= d; over -= d;
+  }
+  out.lvNow = levelOf(p);
+  out.capLv = Math.max(1, Math.floor(100 - (168 - cap) / 2));
+  return out;
+}
+const SKILL_KEYS_CUT = ['LAY', 'DNK', 'INS', 'MID', 'TPT', 'FTS', 'DRB', 'PAS', 'ORE', 'DRE', 'STL', 'BLK'];
+
 // Unlock a skill, reusing the locked (level 0) entry and its XP if present.
 export function unlockSkill(p, id) {
   const s = p.skills.find(x => x.id === id);
@@ -574,7 +621,10 @@ export function runProgression(entries, params, profiles) {
       maybeLongevity(e.p, mult * prod * (e.longMult || 1), params, rng, injured ? risk.cls : null, z, e.longCutMult ?? 1);
     }
     const pot = e.p.pot;
-    if (injured) maybeInjuryPotLoss(e.p, e.injuryYear, params, rng, e.potLossMult ?? 1);
+    if (injured && maybeInjuryPotLoss(e.p, e.injuryYear, params, rng, e.potLossMult ?? 1)) {
+      const cut = injuryRatingCut(e.p, risk.worst, rng);
+      if (cut) (awards.injCut ||= new Map()).set(e.p.id, cut);
+    }
     else maybePotential(e.p, mult * (e.potMult || 1), params, rng, z);
     // Why potential dropped, for the report.
     if (e.p.pot < pot) awards.why.set(e.p.id, injured ? 'injury' : z != null && z <= params.prodPotDownZ ? 'production' : mpg && mpg.mpg < 12 ? 'minutes' : 'development');
