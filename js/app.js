@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.318.1';
+const APP_VERSION = '0.318.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -6998,12 +6998,11 @@ function expDoneBody(x) {
   const L = league(), cap = FA.capLines(L).cap;
   const card = e => { const ps = (x.picks || []).filter(y => y.by === e.id); const pay = ps.reduce((a, y) => a + (y.kind === 'contract' ? y.sal : 0), 0); const s = EXP.CAP_SCALE[0];
     return `<fieldset class="frame"><legend>${esc(teamFull(e))}</legend><p class="note small">${ps.length} players · $${pay}M under contract · year-1 cap $${Math.round(cap * s)}M (two-thirds), floor $${Math.round(cap * s * 0.9)}M. Waive one of these picks before the season and he comes off your cap (he still counts toward the floor).</p>
-      <div class="stack">${ps.map(y => { const p = e.roster.find(q => q.id === y.pid); return p ? expRow(p) : ''; }).join('')}</div>
       <div class="btn-set"><button class="btn wide" data-act="nav" data-to="roster" data-arg="${e.id}">👥 Roster</button></div></fieldset>`; };
   const tpes = tpeList().filter(y => String(y.id).startsWith(`exp:${x.yr}:`));
   return `${expTeamsOf(x).map(card).join('')}
     ${tpes.length ? `<fieldset class="frame"><legend>Trade Exceptions</legend>${tpes.map(y => `<p class="note small">🎟️ ${esc(L.teams.find(t => t.id === y.tid)?.shortName || '')}: $${y.amt}M (${esc(y.who)})</p>`).join('')}</fieldset>` : ''}
-    <p class="note small muted">From here the new teams trade and sign like anyone else (a select-and-trade is just a trade now).</p>${realignBox(L)}`;
+    <p class="note small muted">From here the new teams trade and sign like anyone else (a select-and-trade is just a trade now).</p>`;
 }
 screens.expansion = (args = {}) => {
   const x = expStore();
