@@ -70,9 +70,9 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.323.2';
+const APP_VERSION = '0.323.5';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
-const SHOWN_VERSION = '0.1.0 Beta';
+const SHOWN_VERSION = 'Beta 0.1.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1038,6 +1038,12 @@ function dumpPicks(L, t, weight) {
   if (weight >= 25) { const f = own(1); if (f) out.push(f); }
   if (weight >= 6 && (weight >= 45 || !out.length)) { const s2 = own(2); if (s2) out.push(s2); }
   return out;
+}
+// Your teams under the floor, as Free Agency Week 3 opens: the money gets paid either way.
+function floorNotes() {
+  const L = league();
+  if (isCollege() || !FA.capSystemOn()) return '';
+  return L.teams.filter(isUserTeam).filter(t => underFloor(L, t)).map(t => { const fl = teamFloor(L, t); return `<p class="note small gold">💸 ${esc(t.shortName)} are $${fl - floorPay(t)}M under the salary floor ($${fl}M, 90% of ${FA.capScaleOf(t) < 1 ? 'their expansion' : 'the'} cap). Sign or trade for someone: you'll pay the shortfall either way.</p>`; }).join('');
 }
 // The salary floor: 90% of the cap, as in the NBA. A team under it by the end of the summer takes on salary first
 // (salary dumps go to it ahead of anyone, picks attached as always), then spends the rest on short deals: a contender
@@ -2056,7 +2062,7 @@ function stepActions(key) {
     case 'fa1': case 'fa2': case 'fa3': {
       const day = +key[2];
       // One button a week: it opens free agency or starts the week as needed and goes straight to the market.
-      return `<button class="btn big focus" data-act="faWeek">✍️ ${s.phase === 5 ? 'Open Free Agency' : `Week ${day} Market`}</button>`;
+      return `${day === 3 ? floorNotes() : ''}<button class="btn big focus" data-act="faWeek">✍️ ${s.phase === 5 ? 'Open Free Agency' : `Week ${day} Market`}</button>`;
     }
     case 'staff': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="staff">🧑‍🏫 Begin</button><button class="btn" data-act="staffDone">⏭ Skip</button></div>`;
     case 'meeting': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="meeting">🗣️ Begin</button><button class="btn" data-act="meetingSkip">⏭ Skip</button></div>`;
@@ -2589,11 +2595,13 @@ function bugReportText() {
   lines.push('', 'What happened: ', 'What I expected: ');
   return lines.join('\n');
 }
-function communityRow() {
+// The bottom of the title screen and the main menu: Discord, Report a Bug, Roadmap and the version, one even 2x2 grid.
+const footerGrid = () => communityRow(`${roadmapBtn()}<div class="ver-badge">${SHOWN_VERSION}</div>`);
+function communityRow(more = '') {
   return `<div class="grid2 community">
-      <a class="btn left" href="${DISCORD}" target="_blank" rel="noopener" data-count="discord-join"><span class="ico">💬</span> Join Discord</a>
+      <a class="btn left" href="${DISCORD}" target="_blank" rel="noopener" data-count="discord-join"><span class="ico">💬</span> Join the Discord</a>
       <button class="btn left" data-act="bugReport"><span class="ico">🛠</span> Report a Bug</button>
-    </div>`;
+    ${more}</div>`;
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-count="discord-join"]')) countEvent('discord-join'); });
 // The roadmap: what's here, what's next, what's further out.
@@ -2698,8 +2706,7 @@ screens.main = () => {
           </div>
         </fieldset>
         <div id="installSlot">${installCard()}</div>
-        ${communityRow()}
-        <div class="ver-row">${roadmapBtn()}<div class="ver-badge">Version ${SHOWN_VERSION}</div></div>`,
+        ${footerGrid()}`,
     });
     return;
   }
@@ -2735,8 +2742,7 @@ screens.main = () => {
         <label class="btn left"><span class="ico">📂</span> Load<input type="file" id="fileInput"></label>
         <button class="btn left" data-act="nav" data-to="export"><span class="ico">💾</span> Export</button>
       </div>
-      ${communityRow()}
-      <div class="ver-row">${roadmapBtn()}<div class="ver-badge">Version ${SHOWN_VERSION}</div></div>`,
+      ${footerGrid()}`,
   });
 };
 
@@ -14538,6 +14544,7 @@ screens.fa = (args = {}) => {
     title: `Free Agency · Week ${s.day}`,
     body: `
       <p class="note small">${esc(FA_DAY_RULES[s.day])}</p>
+      ${s.day >= 3 && s.stage !== 'done' ? floorNotes() : ''}
       ${mine.length ? `<fieldset class="frame"><legend>Your Books</legend><div class="stack">${mine.map(t => {
         const ml = FA.mleFor(L, t, s.day, s.used);
         const holds = FA.capHolds(L, t).reduce((a, p) => a + FA.capHold(L, p), 0);
@@ -16211,9 +16218,9 @@ actions.traitsDownload = async () => {
 function traitsBackupBox() {
   if (!state.data || isCollege()) return '';
   const sync = dropboxConnected() ? (state.traitsSynced > 0 ? `Synced to Dropbox ${new Date(state.traitsSynced).toLocaleTimeString()}.` : state.traitsSynced === -1 ? 'The last Dropbox sync failed; it tries again on your next export.' : 'Synced to Dropbox on every export, and read back when this save loads.') : 'Connect Dropbox (Export) to sync them automatically.';
-  return setGroup('Traits Backup', [`<span class="note small">The game doesn't keep traits in its saves, so the app keeps them on this device. ${sync}</span>`,
+  return setGroup('Traits', [`<span class="note small">Saved on this device (the game doesn't keep them). ${dropboxConnected() ? sync : ''}</span>`,
     '<button class="btn small" data-act="traitsDownload">⬇ Download Traits File</button>',
-    '<span class="note muted small">To restore: load the traits file with the same button you load saves with, after loading the save (or before: it waits for that save).</span>']);
+    '<span class="note muted small">To restore, load the traits file like a save.</span>', mindNudgeLine()].filter(Boolean));
 }
 
 // ---- Trait changes
@@ -17153,7 +17160,7 @@ function mindNudgeLine() {
   if (!isComplete() || isCollege()) return '';
   const mine = league().teams.filter(isUserTeam).flatMap(t => t.roster.filter(x => x.status >= 2 && x.tendencies));
   const n = mine.filter(p => Object.keys(nudgeOf(p)).length).length;
-  return n ? `<p class="note muted small">🎛️ Mindset: ${n} of your players carry a one-point tendency nudge into the season (Alphas hold the ball, Humble players move it). It's taken back out when this save comes back.</p>` : '';
+  return n ? `<span class="note muted small">🎛️ Mindset: ${n} player${n === 1 ? '' : 's'} take a small tendency nudge into the season, removed when the save comes back.</span>` : '';
 }
 function unstampDraftYear() {
   const L = league();
@@ -19767,16 +19774,19 @@ screens.export = () => {
       ${jerseyCard()}${gearCard()}
       <fieldset class="frame"><legend>Season File</legend>
         <p class="note file-name">${esc(state.fileName)}</p>
-        ${(() => { const L = league(); if (isCollege() || !FA.capSystemOn()) return ''; return L.teams.filter(isUserTeam).filter(t => underFloor(L, t)).map(t => { const fl = teamFloor(L, t); return `<p class="note small gold">💸 ${esc(t.shortName)} are $${fl - floorPay(t)}M under the salary floor ($${fl}M, 90% of ${FA.capScaleOf(t) < 1 ? 'their expansion' : 'the'} cap). Sign someone, or the shortfall is paid out to your players.</p>`; }).join(''); })()}
         ${(() => { const L = league(); if (isCollege() || L.season.phase !== BUMP_PHASES[0] || calFlags().cuts) return ''; const over = overFifteen(L), mineOver = over.filter(isUserTeam); return over.length ? `<p class="note small ${mineOver.length ? 'down' : 'gold'}">✂️ Roster Finalization isn't done: ${over.length} team${over.length === 1 ? ' is' : 's are'} over 15. ${mineOver.length ? `<b>${mineOver.map(t => esc(t.shortName)).join(', ')}</b> ${mineOver.length === 1 ? 'is yours' : 'are yours'}: make your cuts first, or the game cuts for you without looking at ratings. ` : ''}The CPU teams make their cuts when you export.</p>` : ''; })()}
         ${CAR.isCareer(league()) && state.ledgerIn ? Object.entries(LEDGER).map(([k, d]) => `<p class="note small">${d.icon} ${d.label}: ${ledgerIn(k).toLocaleString()} when loaded ${ledgerNet(k) >= 0 ? '+' : '−'} ${Math.abs(ledgerNet(k)).toLocaleString()} in the app = <b>${Math.max(0, ledgerIn(k) + ledgerNet(k)).toLocaleString()}</b> written to the file. <button class="btn tiny" data-act="nav" data-to="ledger" data-arg="${k}">Ledger</button></p>`).join('') : ''}
         <div class="stack">
           <button class="btn big focus" data-act="download">💾 Download File</button>
         </div>
+        <ol class="note small dl-steps">
+          <li>Download the file.</li>
+          <li>Upload it to your Dropbox.</li>
+          <li>Copy the file's Dropbox link.</li>
+          <li>In Hoop Land, import a season and paste the link.</li>
+        </ol>
         ${inArtifact() ? `<p class="note gold small">Saves as <b>${esc(artifactName(state.fileName))}</b>: rename it to <b>${esc(state.fileName)}</b> (remove ".json") so Hoop Land can load it.</p>` : ''}
-        <p class="note muted small">Load it in Hoop Land and start the season. Keep a backup of the original.</p>
-        ${mindNudgeLine()}
-        ${isCollege() ? '' : `<p class="note muted small">🧬 Traits stay on this device${dropboxConnected() ? ' and sync to Dropbox with this export' : ''}. <button class="btn tiny" data-act="traitsDownload">⬇ Traits File</button></p>`}
+        <p class="note muted small">Keep a backup of your original file.</p>
       </fieldset>
       ${isCollege() || EDITOR_OFF() ? '' : `<fieldset class="frame"><legend>League File (experimental)</legend>
         <p class="note small">Turns this save into a league file: rosters, contracts, ratings, tendencies, coaches, picks and history as they stand, with the season reset so you can start a brand new franchise from it.</p>

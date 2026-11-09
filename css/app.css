@@ -1818,10 +1818,13 @@ a.btn { text-decoration: none; }
 .coach-top b + .muted { margin-left: 4px; }
 .coach-row > .coach-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 /* Roadmap on the left, the version on the right, one line at the bottom. */
-.ver-row { display: flex; align-items: stretch; justify-content: space-between; gap: 10px; margin-top: 8px; }
-.ver-row .roadmap-btn { width: auto; margin: 0; padding: 8px 14px; font-size: 15px; }
-.ver-row .ver-badge { margin: 0; align-self: stretch; display: flex; align-items: center; }
+/* Same grid as the Discord / Report a Bug row above: two equal columns, the same gap. */
+.ver-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.community .roadmap-btn, .community .ver-badge, .ver-row .roadmap-btn, .ver-row .ver-badge { width: 100%; min-width: 0; margin: 0; box-sizing: border-box; }
+.community .ver-badge, .ver-row .ver-badge { display: flex; align-items: center; justify-content: center; text-align: center; }
 /* My Team: History | Contracts, then the small Fans | Chemistry boxes. */
 .team-links { margin-bottom: 8px; }
 .team-mini { margin-bottom: 8px; }
 .team-mini .mini-box { min-height: 0; padding: 8px 10px; line-height: 1.25; text-align: left; }
+.dl-steps { margin: 8px 0 4px; padding-left: 20px; }
+.dl-steps li { margin: 2px 0; }
