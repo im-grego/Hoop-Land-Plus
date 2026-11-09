@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.319.0';
+const APP_VERSION = '0.319.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -13795,9 +13795,11 @@ screens.liveTrade = (args) => {
   if (mode) { const [ca, cb] = swapValues(sw, mode, pv); vA += ca; vB += cb; }
   // Future firsts being sent can carry a protection.
   const firsts = [...aa.filter(x => selA.has(x.key)), ...bb.filter(x => selB.has(x.key))].filter(x => !inSw(x)).filter(x => x.pick && x.pick.rd === 1 && x.pick.yr > draftYear(L));
+  // Two firsts from the same year: each says whose pick it is, so you know which one the protection is on.
+  const protLbl = pk => firsts.filter(y => y.pick.yr === pk.yr).length > 1 ? `${pk.yr} R1 (${L.teams.find(t => t.id === pk.otid)?.shortName || '?'})` : pickLabel(pk);
   const protRows = !isComplete() ? [] : firsts.map(x => protOf(x.pick)
-    ? `<div class="prot-row"><span class="grow small">${esc(pickLabel(x.pick))}</span><span class="small muted">already protected</span></div>`
-    : `<div class="prot-row"><span class="grow small">${esc(pickLabel(x.pick))}</span><div class="seg">${TR.PROTECTIONS.map(v => `<button class="btn ${(prot[x.key] || 0) === v ? 'on focus' : 'off'}" data-act="liveProt" data-k="${x.key}" data-v="${v}">${protName(v, true)}</button>`).join('')}</div></div>`).join('');
+    ? `<div class="prot-row"><span class="grow small">${esc(protLbl(x.pick))}</span><span class="small muted">already protected</span></div>`
+    : `<div class="prot-row"><span class="grow small">${esc(protLbl(x.pick))}</span><div class="seg">${TR.PROTECTIONS.map(v => `<button class="btn ${(prot[x.key] || 0) === v ? 'on focus' : 'off'}" data-act="liveProt" data-k="${x.key}" data-v="${v}">${protName(v, true)}</button>`).join('')}</div></div>`).join('');
   const row = (x, sel, side) => `<button class="pick ${sel.has(x.key) ? 'sel' : ''} ${x.locked ? 'locked' : ''}" ${x.locked ? 'disabled' : `data-act="liveToggle" data-side="${side}" data-k="${x.key}"`}>
       <span class="check"></span><span class="grow">${x.html ? x.label : esc(x.label)}</span>${valTag(pv(x))}</button>`;
   // Players first, the way a trade block reads; picks after in a tighter grid.
@@ -13944,9 +13946,10 @@ function liveTrade3(args, A, B, C, left) {
     return `<p class="note small"><b>${esc(t.shortName)}</b>${showVals() ? ` sends ${Math.round(g)} · gets ${Math.round(r)}` : ''}${cpu && items.length ? ` · ${ok ? '<span class="up">would accept</span>' : '<span class="down">would decline</span>'}` : ''}</p>`;
   }).join('');
   const firsts = items.filter(i => i.x.pick && i.x.pick.rd === 1 && i.x.pick.yr > draftYear(L));
+  const protLbl = pk => firsts.filter(y => y.x.pick.yr === pk.yr).length > 1 ? `${pk.yr} R1 (${L.teams.find(t => t.id === pk.otid)?.shortName || '?'})` : pickLabel(pk);
   const protRows = !isComplete() ? [] : firsts.map(i => protOf(i.x.pick)
-    ? `<div class="prot-row"><span class="grow small">${esc(pickLabel(i.x.pick))}</span><span class="small muted">already protected</span></div>`
-    : `<div class="prot-row"><span class="grow small">${esc(pickLabel(i.x.pick))}</span><div class="seg">${TR.PROTECTIONS.map(v => `<button class="btn ${(prot[i.x.key] || 0) === v ? 'on focus' : 'off'}" data-act="liveProt" data-k="${i.x.key}" data-v="${v}">${protName(v, true)}</button>`).join('')}</div></div>`).join('');
+    ? `<div class="prot-row"><span class="grow small">${esc(protLbl(i.x.pick))}</span><span class="small muted">already protected</span></div>`
+    : `<div class="prot-row"><span class="grow small">${esc(protLbl(i.x.pick))}</span><div class="seg">${TR.PROTECTIONS.map(v => `<button class="btn ${(prot[i.x.key] || 0) === v ? 'on focus' : 'off'}" data-act="liveProt" data-k="${i.x.key}" data-v="${v}">${protName(v, true)}</button>`).join('')}</div></div>`).join('');
   layout({
     title: '3-Team Trade',
     body: `
