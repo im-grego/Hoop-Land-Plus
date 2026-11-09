@@ -1783,3 +1783,9 @@ a.btn { text-decoration: none; }
 /* Realistic NBA setup: a chosen option's check is green. */
 .chk-on { color: var(--up); }
 .chk-on .px { background-color: var(--up); }
+/* Roster Needs legend: each kind boxed, the same space between every line. */
+.need-legend { display: grid; gap: 10px; margin-top: 10px; }
+.need-legend > div { display: grid; grid-template-columns: 76px 1fr; gap: 10px; align-items: start; }
+.need-legend .badge { justify-self: stretch; text-align: center; margin: 0; }
+.sev-legend > div { align-items: center; }
+.sev-legend .sev { display: inline-block; justify-self: center; }
