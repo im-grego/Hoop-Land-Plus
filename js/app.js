@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.318.0';
+const APP_VERSION = '0.318.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -6960,7 +6960,7 @@ function expDraftBody(x) {
   const board = `<div class="pick-set cols4">${[['all', 'All'], ['guards', 'Guards'], ['wings', 'Wings'], ['bigs', 'Bigs']].map(([g, l]) => `<button class="btn small ${grp === g ? 'on focus' : 'off'}" data-act="expGrp" data-g="${g}">${l}</button>`).join('')}</div>
     <div class="stack">${shown.map(y => expRow(y.p, mineNow ? `${owed.has(y.p.id) ? '<span class="small gold">🤝 Deal</span> ' : ''}<button class="btn tiny focus" data-act="expPick" data-id="${y.p.id}">Take</button>` : `<span class="small muted">${esc(y.t.shortName)}</span>`).replace('</span></span>', ` · from ${esc(y.t.shortName)}</span></span>`)).join('') || '<p class="note small muted">The board is empty.</p>'}</div>`;
   const seen = (x.picks || []).slice(0, state.expShown ?? undefined);   // picks still being revealed stay out
-  const log = `<div class="stack">${[...seen].reverse().map(y => { const e = L.teams.find(z => z.id === y.by), f = L.teams.find(z => z.id === y.from); return `<div class="drill-row tap" data-act="openPlayer" data-id="${y.pid}"><span class="pk">${y.n}</span><span class="grow"><b>${esc(e.shortName)}</b>: ${esc(y.name)} <span class="small muted">from ${esc(f?.shortName || '?')} · ${esc(EXP_KIND[y.kind] || '')}${y.sal ? ` · $${y.sal}M × ${y.yrs}` : ''}</span></span></div>`; }).join('') || '<p class="note small muted">No picks yet.</p>'}</div>`;
+  const log = `<div class="stack">${seen.map(y => { const e = L.teams.find(z => z.id === y.by), f = L.teams.find(z => z.id === y.from); return `<div class="drill-row tap" data-act="openPlayer" data-id="${y.pid}"><span class="pk">${y.n}</span><span class="grow"><b>${esc(e.shortName)}</b>: ${esc(y.name)} <span class="small muted">from ${esc(f?.shortName || '?')} · ${esc(EXP_KIND[y.kind] || '')}${y.sal ? ` · $${y.sal}M × ${y.yrs}` : ''}</span></span></div>`; }).join('') || '<p class="note small muted">No picks yet.</p>'}</div>`;
   const ctl = !t ? `<div class="btn-set"><button class="btn focus wide" data-act="expFinish">🏁 Close the Draft</button></div>`
     : mineNow ? `<p class="note"><b class="gold">You're on the clock</b> for ${esc(t.shortName)} (pick ${n(t) + 1}).</p><div class="btn-set"><button class="btn" data-act="expStop" ${n(t) >= EXP.EXP_MIN ? '' : 'disabled'}>✋ Done Drafting</button><button class="btn" data-act="expSim" data-all="1">🤖 Auto-Draft Rest</button></div>`
     : `<div class="btn-set"><button class="btn focus" data-act="expSim" data-one="1">▶ Next Pick</button><button class="btn" data-act="expSim">⏩ ${expTeamsOf(x).some(isUserTeam) ? 'To My Pick' : 'Sim the Draft'}</button></div>`;
