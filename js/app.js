@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.319.1';
+const APP_VERSION = '0.319.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -11337,7 +11337,7 @@ const prospectRow = (p, extra = '', { mine = false } = {}) => {
 
 // Filters shared by Prospects and My Board (the same ones Private Workouts uses): a list, and a position group.
 const BOARD_FILTERS = [['board', '★ Board'], ['needs', '🧩 Needs'], ['scouted', '🔎 Scouted'], ['all', 'All']];
-const boardF = () => ({ f: 'all', pos: 'all', ...(state.boardF || {}) });
+const boardF = () => ({ pos: 'all', ...(state.boardF || {}), f: 'all' });
 function boardFilterOk(p) {
   const { f, pos } = boardF(), me = league().teams.find(isUserTeam);
   if (f === 'board' && !onBoard(p.id)) return false;
@@ -11347,8 +11347,8 @@ function boardFilterOk(p) {
 }
 function boardFilterBar(lists = BOARD_FILTERS) {
   const { f, pos } = boardF();
-  return `<div class="seg lab-seg">${lists.map(([k, l]) => `<button class="btn small ${k === f ? 'on focus' : 'off'}" data-act="boardF" data-f="${k}">${esc(l)}</button>`).join('')}</div>
-    <div class="seg lab-seg">${[['all', 'All'], ['guards', 'Guards'], ['wings', 'Wings'], ['bigs', 'Bigs']].map(([k, l]) => `<button class="btn small ${k === pos ? 'on focus' : 'off'}" data-act="boardPos" data-p="${k}">${l}</button>`).join('')}</div>`;
+  // Position only: the board is being built and nobody's been scouted yet; needs show up by position anyway.
+  return `<div class="seg lab-seg">${[['all', 'All'], ['guards', 'Guards'], ['wings', 'Wings'], ['bigs', 'Bigs']].map(([k, l]) => `<button class="btn small ${k === pos ? 'on focus' : 'off'}" data-act="boardPos" data-p="${k}">${l}</button>`).join('')}</div>`;
 }
 actions.boardF = d => { state.boardF = { ...boardF(), f: d.f }; render(); };
 actions.boardPos = d => { state.boardF = { ...boardF(), pos: d.p }; render(); };
