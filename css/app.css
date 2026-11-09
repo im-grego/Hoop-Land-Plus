@@ -1789,3 +1789,13 @@ a.btn { text-decoration: none; }
 .need-legend .badge { justify-self: stretch; text-align: center; margin: 0; }
 .sev-legend > div { align-items: center; }
 .sev-legend .sev { display: inline-block; justify-self: center; }
+/* The screen's ? at the end of the first line of text. */
+.info-i.inline-help { position: static; display: inline-flex; width: 24px; height: 24px; font-size: 14px; margin-left: 4px; vertical-align: middle; box-shadow: 0 2px 0 var(--btn-shadow); }
+/* Team needs: closed boxes, no notched corners. */
+.ol-need { clip-path: none; }
+/* Tabs: a little less padding so three fit on one line on a phone. */
+.tabs .btn { padding-left: 6px; padding-right: 6px; }
+/* Four or more tabs: tighter, so the draft's four still sit on one line. */
+.tabs:has(> .btn:nth-child(4)) { gap: 6px; }
+.tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) { flex-wrap: nowrap; }
+.tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) > .btn { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.1; font-size: 14px; padding-left: 4px; padding-right: 4px; }

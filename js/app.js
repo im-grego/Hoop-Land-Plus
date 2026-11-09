@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.315.3';
+const APP_VERSION = '0.316.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -567,10 +567,17 @@ function layout({ title, left = '', right = '', body, action = null, actionLeft 
 const helpKey = (map, text) => Object.keys(map).find(k => text === k || text.startsWith(`${k} `) || text.startsWith(`${k} ·`) || text.startsWith(`${k}s`));
 function addHelp(title) {
   const t = String(title || '').trim(), sk = helpKey(SCREEN_HELP, t);
+  // The screen's ? goes at the end of the page's first line of text, where it reads naturally; a page with no text
+  // gets it on its first section; failing both, a small row of its own.
   const panel = $app.querySelector('main.panel');
-  if (sk && panel && !panel.querySelector(':scope > .screen-help')) {
+  if (sk && panel && !panel.querySelector('.screen-help, .inline-help')) {
     INFO[`s:${sk}`] = SCREEN_HELP[sk];
-    panel.insertAdjacentHTML('afterbegin', `<div class="screen-help"><button class="info-i" data-act="infoPop" data-k="${esc(`s:${sk}`)}" aria-label="What this screen does">?</button></div>`);
+    const btn = cls => `<button class="info-i ${cls}" data-act="infoPop" data-k="${esc(`s:${sk}`)}" aria-label="What this screen does">?</button>`;
+    const note = [...panel.querySelectorAll('p.note')].find(x => x.offsetParent !== null && !x.closest('.overlay, .drill-row, .offer, button'));
+    const fs = panel.querySelector('fieldset.frame');
+    if (note) note.insertAdjacentHTML('beforeend', ` ${btn('inline-help')}`);
+    else if (fs && !fs.querySelector(':scope > .info-i')) fs.querySelector(':scope > legend')?.insertAdjacentHTML('afterend', btn(''));
+    else panel.insertAdjacentHTML('afterbegin', `<div class="screen-help">${btn('')}</div>`);
   }
   for (const lg of $app.querySelectorAll('fieldset.frame > legend')) {
     const fs = lg.parentElement;
@@ -12336,9 +12343,13 @@ function frontOfficeOffers(team, { only = null, max = 3 } = {}) {
   }
   // Teams a few slots behind your picks calling to move up.
   const order = actualDraftOrder(L) || [];
+  let upCalls = 0;
   order.forEach((o, idx) => {
     if (o.owner.id !== team.id) return;
-    for (const x of tradeUpOffers(L, order, idx, { value: futureValue, slot: slotValue, rng, count: 1, eager: 0.7, frozen: frozenFn })) {
+    // Calls to move up are rarer than block offers, pay a fair price (not a windfall), and dry up as you keep trading down.
+    if (upCalls >= 2) return;
+    for (const x of tradeUpOffers(L, order, idx, { value: futureValue, slot: slotValue, rng, count: 1, eager: 0.4 * 0.5 ** (ds.downs || 0), frozen: frozenFn, ceil: 1.2 })) {
+      upCalls++;
       out.push({ team: x.team, kind: 'up',
         give: x.give.map(pk => ({ pick: pk, key: pk.yr === draftYear(L) ? `c:${order.find(q => slotPick(L, q) === pk)?.overall}` : `f:${pk.yr}:${pk.rd}:${pk.otid}`, text: pk.yr === draftYear(L) ? `#${order.find(q => slotPick(L, q) === pk)?.overall}` : pickLabel(pk) })),
         get: [{ pick: x.get, key: `c:${o.overall}`, text: `#${o.overall}` }] });
@@ -12384,7 +12395,7 @@ actions.officeAccept = async d => {
   if (!o) return;
   const mine = L.teams.filter(isUserTeam);
   const team = L.teams.find(t => t.id === (ds.officeTeam ?? mine[0].id)) || mine[0];
-  if (await doOffer(team, o)) { for (const x of o.get) ds.block?.delete(x.key); ds.offers = null; render(); }
+  if (await doOffer(team, o)) { if (o.kind === 'up') ds.downs = (ds.downs || 0) + 1; for (const x of o.get) ds.block?.delete(x.key); ds.offers = null; render(); }
 };
 // Confirm and make an offer's trade. → true when it went through.
 async function doOffer(team, o) {

@@ -196,7 +196,7 @@ export function slotPick(league, o) {
 // moving up expects to be better by then. `value(pk)` values a future pick,
 // `slot(overall)` a pick in this draft; teams in `exclude` sit out.
 // Returns [{ team, give: [pick objects], get: pick object, worth }].
-export function tradeUpOffers(league, order, idx, { value, slot, rng, min = 3, max = 8, far = 0, count = 2, eager = 0.5, exclude = new Set(), frozen = () => false }) {
+export function tradeUpOffers(league, order, idx, { value, slot, rng, min = 3, max = 8, far = 0, count = 2, eager = 0.5, exclude = new Set(), frozen = () => false, ceil = null }) {
   const here = order[idx];
   const target = slotPick(league, here);
   if (!target) return [];
@@ -228,7 +228,7 @@ export function tradeUpOffers(league, order, idx, { value, slot, rng, min = 3, m
       give.push(pk);
       total += value(pk);
     }
-    if (total >= want * 1.05 && total <= want * (big ? 1.8 : 1.6)) offers.push({ team: o.owner, give, get: target, worth: total, from: o.overall });
+    if (total >= want * 1.05 && total <= want * (ceil ?? (big ? 1.8 : 1.6))) offers.push({ team: o.owner, give, get: target, worth: total, from: o.overall });
     if (offers.length >= count) break;
   }
   return offers;
