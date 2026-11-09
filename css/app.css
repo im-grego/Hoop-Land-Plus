@@ -1767,11 +1767,11 @@ a.btn { text-decoration: none; }
 /* The coin and Coaching Credit icons: pixel coins after the number, like the game's coin counter. */
 .coin-tag { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .coin-ico { width: 1.15em; height: 1.15em; flex: none; image-rendering: pixelated; vertical-align: -0.2em; }
-.coin-chip .coin-tag { font-family: var(--pixel); font-size: 16px; }
-.coin-chip .coin-ico { width: 20px; height: 20px; }
+.coin-chip .coin-tag { font-family: var(--font); font-weight: 800; font-size: 15px; letter-spacing: 0; gap: 3px; }
+.coin-chip .coin-ico { width: 18px; height: 18px; }
 /* Top-right counters: coins over Franchise Tokens, as wide as they used to be, in a lighter frame than the big bar
    buttons so the number and coin fit. */
-.header .btn.coin-chip { min-width: 0; height: 30px; min-height: 30px; padding: 0 10px; justify-content: flex-end; border-width: 3px; box-shadow: inset 0 0 0 3px var(--ring); clip-path: none; }
+.header .btn.coin-chip { min-width: 0; height: 30px; min-height: 30px; padding: 0 8px; justify-content: flex-end; border-width: 3px; box-shadow: inset 0 0 0 3px var(--ring); clip-path: none; }
 .header .btn.coin-chip:active { box-shadow: inset 0 0 0 3px var(--ring); }
 /* The screen's ? at the top right of the page, never in the top bar. */
 .screen-help { display: flex; justify-content: flex-end; margin: -4px -2px 4px; }
@@ -1780,3 +1780,6 @@ a.btn { text-decoration: none; }
 .fans-row .muted { margin-left: 2px; }
 /* The two counters stacked fill the top bar's height (64px), like the game's. */
 .header .career-chips { gap: 4px; justify-content: space-between; }
+/* Realistic NBA setup: a chosen option's check is green. */
+.chk-on { color: var(--up); }
+.chk-on .px { background-color: var(--up); }

@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.313.1';
+const APP_VERSION = '0.314.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -2256,7 +2256,7 @@ screens.nbaSetup = () => {
   layout({
     title: 'Realistic NBA',
     body: `<div class="stack">${NBA_SETUP.map(x => `<button class="drill-row tap setup-opt ${on[x.k] ? 'sel' : ''}" data-act="nbaSetupToggle" data-k="${x.k}" ${done(x.k) ? 'disabled' : ''}>
-        <span class="grow"><b>${on[x.k] || done(x.k) ? '✅' : '⬜'} ${esc(x.title)}</b><br><span class="small muted">${esc(x.text)}</span></span>${done(x.k) ? '<span class="small up">Applied</span>' : ''}</button>`).join('')}</div>
+        <span class="grow"><b>${on[x.k] || done(x.k) ? '<span class="chk-on">✅</span>' : '⬜'} ${esc(x.title)}</b><br><span class="small muted">${esc(x.text)}</span></span>${done(x.k) ? '<span class="small up">Applied</span>' : ''}</button>`).join('')}</div>
       <p class="note small muted">Change any of these later in Settings.</p>`,
     action: { act: 'nbaSetupApply', label: 'Apply' },
   });
@@ -4656,8 +4656,8 @@ function spendCoins(t, n) {
 }
 // The coin (gold, a ¢ on it) for coins: facility upgrades and the luxury tax. The pink coin for Franchise Tokens, which
 // buy the Coaching Tree. Both 9×9 pixel art, scaled up crisp.
-const COIN_GOLD = '<img class="coin-ico" src="icons/coin.png" alt="coins">';
-const COIN_PINK = '<img class="coin-ico" src="icons/credit.png" alt="Franchise Tokens">';
+const COIN_GOLD = '<img class="coin-ico" src="icons/coin.png" alt="" title="Coins">';
+const COIN_PINK = '<img class="coin-ico" src="icons/credit.png" alt="" title="Franchise Tokens">';
 const coinTag = n => `<span class="coin-tag">${n}${COIN_GOLD}</span>`;
 const tokTag = n => `<span class="coin-tag">${n}${COIN_PINK}</span>`;
 
@@ -4724,9 +4724,9 @@ screens.coachtree = () => {
   layout({
     title: 'Skill Tree',
     body: `<fieldset class="frame"><legend>${c ? esc(`${c.fn} ${c.ln}`) : 'Your Staff'}</legend>
-        <p class="note">Franchise Tokens come from each season: one for the job, more for a winning record, the ${isCollege() ? 'tournament' : 'playoffs'}, a deep run and a title. Your coach's own ratings (13+ and 17+) start tiers unlocked.</p>
-        <p class="note"><b class="gold">${tokTag(pts)}</b> Franchise Token${pts === 1 ? '' : 's'} to spend</p>
-        <div class="stack small">${Object.entries(tree.earned).map(([k, e]) => `<span class="muted">${k === 'start' ? 'Start' : k}: +${e.pts} · ${esc(e.why.join(', '))}</span>`).join('')}</div></fieldset>
+        <p class="note"><b class="gold">${tokTag(pts)}</b> to spend</p>
+        <p class="note small">You earn Franchise Tokens every season: 1 for the job, plus more for a winning record, ${isCollege() ? 'the tournament' : 'the playoffs'}, a deep run and a title. A coach rated 13+ or 17+ starts with those tiers unlocked.</p>
+        <div class="stack small">${Object.entries(tree.earned).sort(([a], [b]) => (a === 'start') - (b === 'start') || b.localeCompare(a)).map(([k, e]) => `<span class="muted">${k === 'start' ? 'Start' : k}: <b class="up">+${e.pts}</b> (${esc(e.why.join(', ').toLowerCase())})</span>`).join('')}</div></fieldset>
       ${CO.BRANCHES.map(b => {
         const nodes = CO.NODES[b.k].filter(n => n.spine || extras);
         const row = r => nodes.filter(n => n.row === r);
@@ -15975,7 +15975,7 @@ const driftGood = x => ([EGO_KEY, 'money'].includes(x.k) ? x.d < 0 : x.d > 0);
 const driftShort = x => `${traitIcon(x.k)} ${traitLbl(x.k)} ${x.d > 0 ? '+' : '−'}${Math.abs(x.d)}`;
 function traitChangesCard(filter = () => true, title = 'Trait Changes') {
   if (!isComplete() || isCollege()) return '';
-  const rows = league().teams.filter(isUserTeam).flatMap(t => t.roster).map(p => ({ p, ds: driftsOf(p).filter(filter) })).filter(x => x.ds.length);
+  const rows = league().teams.filter(isUserTeam).flatMap(t => t.roster).map(p => ({ p, ds: driftsOf(p).filter(filter) })).filter(x => x.ds.length).sort((a, b) => shownLevel(b.p) - shownLevel(a.p));
   if (!rows.length) return '';
   const why = rows.map(({ p, ds }) => `<p class="small trait-txt"><b>${esc(playerName(p))}</b>: ${ds.map(x => `${esc(driftShort(x))}, ${esc(x.why)}`).join('; ')}</p>`).join('');
   return `<fieldset class="frame"><legend>${title}</legend>${infoBtn(`tc:${title}`, `<p class="small muted">Each player's biggest change shows on the card; every change is listed here. Green helps, red hurts. For Ego and Money, down is good.</p>${why}`)}<div class="stack">${rows.map(({ p, ds }) => `<div class="drill-row tap one-line" data-act="openPlayer" data-id="${p.id}"><span class="grow"><b>${esc(playerName(p))}</b></span><span class="small tc-one">${(() => { const x = [...ds].sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0]; return `<span class="trait-txt ${driftGood(x) ? 'up' : 'down'}">${esc(driftShort(x))}</span>${ds.length > 1 ? ` <span class="muted">+${ds.length - 1}</span>` : ''}`; })()}</span></div>`).join('')}</div></fieldset>`;
