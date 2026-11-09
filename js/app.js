@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.316.0';
+const APP_VERSION = '0.316.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -13754,7 +13754,7 @@ screens.liveTrade = (args) => {
   if (!sw) args.swap = null;
   const mode = sw && args.swap;
   const inSw = x => !!mode && (x === sw.xa || x === sw.xb);
-  const sum = (list, sel, to) => list.filter(x => sel.has(x.key) && !inSw(x)).reduce((s, x) => s + pv(x) * fitItem(x, to), 0);   // valued by the team getting it
+  const sum = (list, sel, to) => pkgValue(list.filter(x => sel.has(x.key) && !inSw(x)).map(x => pv(x) * fitItem(x, to)));   // valued by the team getting it
   let vA = sum(aa, selA, B), vB = sum(bb, selB, A);
   if (mode) { const [ca, cb] = swapValues(sw, mode, pv); vA += ca; vB += cb; }
   // Future firsts being sent can carry a protection.
@@ -13891,7 +13891,7 @@ function liveTrade3(args, A, B, C, left) {
   const adjust = tradeAdjustN(teams, items);
   const val = i => pickItemValue(i.x, prot, adjust);
   const give = t => items.filter(i => i.from === t).reduce((s, i) => s + val(i), 0);
-  const get = t => items.filter(i => i.to === t).reduce((s, i) => s + val(i) * fitItem(i.x, t), 0);
+  const get = t => pkgValue(items.filter(i => i.to === t).map(i => val(i) * fitItem(i.x, t)));
   const others = teams.filter(t => t !== tab);
   const many = t => (t === A ? left.length > 1 : true);
   const arrow = (dir, ch, side) => `<button class="tsel-arrow" data-act="liveCycle" data-side="${side}" data-dir="${dir}" aria-label="${dir < 0 ? 'Previous' : 'Next'} team">${ch}</button>`;
@@ -13964,7 +13964,7 @@ actions.liveTradeGo3 = async d => {
   const prot = a.prot || {};
   const adjust = tradeAdjustN(teams, items);
   if (!force) {
-    const no = teams.find(t => !isUserTeam(t) && !cpuAccepts(items.filter(i => i.from === t).reduce((s, i) => s + pickItemValue(i.x, prot, adjust), 0), items.filter(i => i.to === t).reduce((s, i) => s + pickItemValue(i.x, prot, adjust) * fitItem(i.x, t), 0)));
+    const no = teams.find(t => !isUserTeam(t) && !cpuAccepts(items.filter(i => i.from === t).reduce((s, i) => s + pickItemValue(i.x, prot, adjust), 0), pkgValue(items.filter(i => i.to === t).map(i => pickItemValue(i.x, prot, adjust) * fitItem(i.x, t)))));
     if (no) { toast(`${no.shortName} decline: they want more back`); return; }
     if (!(await physicals3(L, items))) return;
   }
@@ -13984,6 +13984,11 @@ actions.liveTrade = () => { if (state.revealing) return; tradeBarPos = 50; go('l
 // the marker slides left the more the deal favors the left team and right
 // the more it favors the right team. It animates from where it last was.
 let tradeBarPos = 50;
+// What a pile of assets is worth to the team taking it: the best three count in full, each one after that a little
+// less (a roster can only use so much), so thirty spare picks don't add up to a superstar.
+function pkgValue(vals) {
+  return [...vals].sort((a, b) => b - a).reduce((s, v, i) => s + v * (i < 3 ? 1 : 0.8 ** (i - 2)), 0);
+}
 function tradeBar(A, B, vA, vB) {
   const empty = !vA && !vB;
   const judge = isUserTeam(B) && !isUserTeam(A) ? A : B;
@@ -14061,7 +14066,7 @@ actions.liveTradeGo = async d => {
   // A swap keeps both picks where they are and settles on lottery night.
   const sw = a.swap ? swapPair(sa.items, sb.items) : null;
   const swapMode = sw ? a.swap : null;
-  let vA = sa.items.filter(x => x !== sw?.xa).reduce((s, x) => s + pv(x) * fitItem(x, B), 0), vB = sb.items.filter(x => x !== sw?.xb).reduce((s, x) => s + pv(x) * fitItem(x, A), 0);
+  let vA = pkgValue(sa.items.filter(x => x !== sw?.xa).map(x => pv(x) * fitItem(x, B))), vB = pkgValue(sb.items.filter(x => x !== sw?.xb).map(x => pv(x) * fitItem(x, A)));
   if (sw) { const [ca, cb] = swapValues(sw, swapMode, pv); vA += ca; vB += cb; }
   const swapOut = sw ? { ...sw } : null;
   if (sw) for (const [sd, x] of [[sa, sw.xa], [sb, sw.xb]]) { sd.items = sd.items.filter(i => i !== x); sd.picks = sd.picks.filter(pk => pk !== x.pick); }
