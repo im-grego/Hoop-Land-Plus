@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.1';
+const APP_VERSION = '0.317.2';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -565,7 +565,10 @@ function layout({ title, left = '', right = '', body, action = null, actionLeft 
 
 // The ? help (helptext.js): by the screen title, and on any section whose heading has help and no ? of its own.
 const helpKey = (map, text) => Object.keys(map).find(k => text === k || text.startsWith(`${k} `) || text.startsWith(`${k} ·`) || text.startsWith(`${k}s`));
+// The bulk screen and section ?s (js/helptext.js) are off for now; the ones written into a screen stay.
+const AUTO_HELP = false;
 function addHelp(title) {
+  if (!AUTO_HELP) return;
   const t = String(title || '').trim(), sk = helpKey(SCREEN_HELP, t);
   // The screen's ? goes at the end of the page's first line of text, where it reads naturally; a page with no text
   // gets it on its first section; failing both, a small row of its own.
