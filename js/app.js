@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.5';
+const APP_VERSION = '0.317.6';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -12657,7 +12657,7 @@ function lotteryResultView() {
         const move = pre.indexOf(o.orig) - i;
         const rr = rec.get(o.orig.id);
         return `<div class="lot-row ${isUserTeam(o.owner) ? 'mine' : ''}" data-tid="${o.orig.id}" data-pick="${n}" data-name="${esc(`${o.orig.city} ${o.orig.name}`.trim())}" data-via="${o.owner && o.owner.id !== o.orig.id ? esc(`${o.owner.city} ${o.owner.name}`.trim()) : ''}" data-move="${move}"><span class="pk">${n}</span>${logoImg(o.orig)}
-          <span class="grow">${esc(o.orig.shortName)} <span class="muted small">${rr ? `${rr.W}-${rr.L}` : ''}</span> ${statusTag(teamStatus(L, o.orig))}${o.owner.id !== o.orig.id ? ` <span class="small gold">→ ${esc(o.owner.shortName)}</span>` : ''}</span>
+          <span class="grow">${esc(o.orig.shortName)} <span class="muted small">${rr ? `${rr.W}-${rr.L}` : ''}</span> ${statusTag(teamStatus(L, o.orig))}${o.owner.id !== o.orig.id ? `<span class="small gold lot-via">→ ${esc(o.owner.shortName)}</span>` : ''}</span>
           <span class="mv ${move > 0 ? 'up' : move < 0 ? 'down' : 'muted'}">${move > 0 ? `▲${move}` : move < 0 ? `▼${-move}` : '—'}</span></div>`;
       }).join('')}</div>`,
   });

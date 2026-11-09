@@ -1801,3 +1801,5 @@ a.btn { text-decoration: none; }
 .tabs:has(> .btn:nth-child(4)):not(:has(> .btn:nth-child(5))) > .btn { flex: 1 1 auto; min-width: min-content; white-space: normal; overflow-wrap: normal; word-break: normal; line-height: 1.1; font-size: 14px; padding-left: 4px; padding-right: 4px; }
 .pros-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pros-chips .grade { margin: 0; }
+/* Lottery: where a traded pick goes, on its own line under the team. */
+.lot-via { display: block; white-space: nowrap; }
