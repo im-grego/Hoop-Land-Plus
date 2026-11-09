@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.313.0';
+const APP_VERSION = '0.313.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -636,7 +636,7 @@ function render() {
   }
   let target = view === lastView ? y : top.y ?? 0;
   if (view === lastView && state.anchor) {
-    const n = document.querySelector(`[data-anchor="${state.anchor.key}"]`);
+    const n = state.anchor.sel ? document.querySelector(state.anchor.sel) : document.querySelector(`[data-anchor="${state.anchor.key}"]`);
     if (n) target = Math.max(0, n.getBoundingClientRect().top + window.scrollY - state.anchor.top);
   }
   state.anchor = null;
@@ -672,7 +672,10 @@ function runAct(el, e) {
   state.curAct = act; state.curWhy = null;
   // Keep the card you tapped where it is on screen through the redraw.
   const box = el.closest('[data-anchor]');
-  state.anchor = box ? { key: box.dataset.anchor, top: box.getBoundingClientRect().top } : null;
+  // Otherwise the button itself: found again after the redraw by its own data (a + or − on a trait, skill or tendency
+  // stays right under your finger even when tags above it come and go).
+  const sel = box ? `[data-anchor="${CSS.escape(box.dataset.anchor)}"]` : Object.entries(el.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)}="${CSS.escape(v)}"]`).join('');
+  state.anchor = { sel, top: (box || el).getBoundingClientRect().top };
   if (fn) fn(el.dataset, el, e);
 }
 // Touch taps run on finger-up: iOS sometimes spends the first tap on a
