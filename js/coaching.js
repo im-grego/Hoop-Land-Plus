@@ -116,10 +116,10 @@ export function effects(tree, coach, on) {
 export function seasonPoints(team, college) {
   const rows = (team.season || []).filter(s => s.seasonStats?.GP > 0);
   const row = rows[rows.length - 1];
-  if (!row) return { pts: 1, why: ['A season on the job'], yr: null };
+  if (!row) return { pts: 1, why: ['Completed a season'], yr: null };
   const { W, L } = row.seasonStats;
   const pct = W + L ? W / (W + L) : 0;
-  const why = ['A season on the job'];
+  const why = ['Completed a season'];
   let pts = 1;
   if (pct > 0.5) { pts++; why.push(`Winning record (${W}-${L})`); }
   if (pct >= 0.65) { pts++; why.push('65%+ of games won'); }

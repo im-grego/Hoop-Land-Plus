@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.314.1';
+const APP_VERSION = '0.315.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -4617,10 +4617,14 @@ function earnCoachPoints() {
   const tree = treeStore(), t = (myTeam() || null);
   if (!t) return;
   const yr = league().season.currentYear;
-  if (!tree.earned.start) tree.earned.start = { pts: isComplete() && !isCollege() ? 3 : 2, why: ['A new staff'] };
+  if (!tree.earned.start) tree.earned.start = { pts: isComplete() && !isCollege() ? 3 : 2, why: ['Started a franchise'] };
+  // Tiers a coach brings with him stay with the franchise when he leaves.
+  const cc = myCoach();
+  if (cc) { const ct = CO.coachTiers(cc); for (const k of Object.keys(ct)) if ((ct[k] || 0) > (tree.bought[k] || 0)) tree.bought[k] = ct[k]; }
   if (!tree.earned[yr]) { const e = CO.seasonPoints(t, isCollege()); if (isComplete() && !isCollege()) { e.pts++; e.why.push('Franchise growth'); } tree.earned[yr] = e; }
   saveTree();
 }
+const earnWhy = w => ({ 'A new staff': 'Started a franchise', 'A season on the job': 'Completed a season' }[w] || w);
 const coachPoints = () => { const tr = treeStore(); return Object.values(tr.earned).reduce((a, e) => a + e.pts, 0) - tr.spent; };
 
 function coachCard() {
@@ -4628,9 +4632,9 @@ function coachCard() {
   if (!t) return '';
   earnCoachPoints();
   const c = myCoach(), yr = league().season.currentYear, e = treeStore().earned[yr];
-  return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>' + COIN_PINK + ' Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: one for the job, more for a winning record, making the playoffs, a deep run and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. A head coach with high ratings unlocks the first tiers of his branch for free.</p><p class="small muted">Coins (💵) are different: they buy arena facility upgrades.</p>')}<div class="stack">
+  return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>' + COIN_PINK + ' Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: 1 for completing a season, having a winning record, making the playoffs, a deep run, and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. Higher rated coaches may start with skills unlocked, and every upgrade stays with your franchise, even with a new coach.</p><p class="small muted">Coins (' + COIN_GOLD + ') are different: they buy arena upgrades.</p>')}<div class="stack">
     <button class="drill-row tap" data-act="nav" data-to="coaches"><span class="grow"><b>${c ? esc(`${c.fn} ${c.ln}`) : 'Head coach'}</b><br><span class="muted small">Head coach · tap for his profile</span></span><span class="small">›</span></button>
-    <p class="note small"><b class="gold">${tokTag(coachPoints())}</b> Franchise Tokens to spend${e ? ` · <span class="up">+${e.pts}</span> this offseason (${esc(e.why.join(', '))})` : ''}</p>
+    <p class="note small"><b class="gold">${tokTag(coachPoints())}</b> Franchise Tokens to spend${e ? ` · <span class="up">+${e.pts}</span> this offseason (${esc(e.why.map(earnWhy).join(', '))})` : ''}</p>
     <p class="note small muted">${CO.BRANCHES.map(b => { const ns = CO.NODES[b.k] || []; return ns.length ? `${b.icon} ${b.label} ${ns.filter(n => CO.nodeOwned(treeStore(), c, n, b.k)).length}/${ns.length}` : ''; }).filter(Boolean).join(' · ')}</p>
     <p class="note small" style="margin:4px 0 0"><b class="gold">Staff</b></p>
     <div class="grid2"><button class="btn" data-act="nav" data-to="coaches">🧑‍🏫 Coach Profiles</button><button class="btn" data-act="nav" data-to="coachtree">🌳 Coaching Tree</button></div>
@@ -4726,8 +4730,8 @@ screens.coachtree = () => {
     title: 'Skill Tree',
     body: `<fieldset class="frame"><legend>${c ? esc(`${c.fn} ${c.ln}`) : 'Your Staff'}</legend>
         <p class="note"><b class="gold">${tokTag(pts)}</b> to spend</p>
-        <p class="note small">You earn Franchise Tokens every season: 1 for the job, plus more for a winning record, ${isCollege() ? 'the tournament' : 'the playoffs'}, a deep run and a title. A coach rated 13+ or 17+ starts with those tiers unlocked.</p>
-        <div class="stack small">${Object.entries(tree.earned).sort(([a], [b]) => (a === 'start') - (b === 'start') || b.localeCompare(a)).map(([k, e]) => `<span class="muted">${k === 'start' ? 'Start' : k}: <b class="up">+${e.pts}</b> (${esc(e.why.join(', ').toLowerCase())})</span>`).join('')}</div></fieldset>
+        <p class="note small">${isCollege() ? 'You earn Franchise Tokens every season: 1 for completing a season, having a winning record, making the tournament, a deep run, and a title.' : 'You earn Franchise Tokens every season: 1 for completing a season, having a winning record, making the playoffs, a deep run, and a title.'}<br>Higher rated coaches may start with skills unlocked. Every upgrade stays with your franchise, even with a new coach.</p>
+        <div class="stack small">${Object.entries(tree.earned).sort(([a], [b]) => (a === 'start') - (b === 'start') || b.localeCompare(a)).map(([k, e]) => `<span class="muted">${k === 'start' ? 'Start' : k}: <b class="up">+${e.pts}</b> (${esc(e.why.map(earnWhy).join(', ').toLowerCase())})</span>`).join('')}</div></fieldset>
       ${CO.BRANCHES.map(b => {
         const nodes = CO.NODES[b.k].filter(n => n.spine || extras);
         const row = r => nodes.filter(n => n.row === r);
