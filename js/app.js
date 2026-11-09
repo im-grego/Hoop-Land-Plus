@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.3';
+const APP_VERSION = '0.317.4';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1607,7 +1607,7 @@ const COLLEGE_CAL = [
     done: () => !!calFlags().signing },
   { key: 'schedule', date: 'Jun 12', title: 'Non-Conference Schedule', blurb: 'Buy games, an early-season tournament, ranked road games: wins against a tournament case.',
     done: () => !!calFlags().schedule },
-  { key: 'summer', date: 'Jun 20', title: 'Summer Workouts', blurb: 'Off-season progression, a check-in with the trainer, mentorship and the strength program.',
+  { key: 'summer', date: 'Jun 20', title: 'Summer Workouts', blurb: 'Offseason progression, a check-in with the trainer, mentorship and the strength program.',
     done: () => !!calFlags().summer },
   { key: 'tour', date: 'Jul 20', title: 'Summer Tour', blurb: 'A trip abroad for 10 extra practices, or stay home and save the collective\'s money.',
     done: () => !!calFlags().tour },
@@ -5440,7 +5440,7 @@ screens.offseason = (args = {}) => {
     body: `
       ${isCollege() ? '' : ''}
       ${uiTabs('camp', [
-        ['prog', 'Progression', `      <fieldset class="frame"><legend>Off-season Progression</legend>
+        ['prog', 'Progression', `      <fieldset class="frame"><legend>Offseason Progression</legend>
         <div class="stack">
           ${auto ? `
             <dl class="info tight">
@@ -5457,7 +5457,7 @@ screens.offseason = (args = {}) => {
           : `
             <p class="note"><b>Development coach:</b> players ${bands[bands.length - 1][0]} and under get ratings upgrades, based on youth and usage.</p>
             <p class="note"><b>Trainer:</b> last season's production is weighed against players in the same role and age. Standouts can gain potential, or push their regression age back a year if they're at it (or a year away). Poor seasons and injuries can cost potential or bring regression a year sooner, but never for a player who's already declining.</p>
-            <button class="btn big focus" data-act="runAuto">▶ Run Off-season Progression</button>`}
+            <button class="btn big focus" data-act="runAuto">▶ Run Offseason Progression</button>`}
         </div>
       </fieldset>
       ${isCollege() ? '' : influenceBox(auto)}${auto && !isCollege() ? traitChangesCard(() => true, 'Summer Trait Changes') : ''}`],
