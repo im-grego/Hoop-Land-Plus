@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.317.6';
+const APP_VERSION = '0.317.7';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -6719,7 +6719,7 @@ function lotteryPins(L) {
 actions.expCreate = async () => {
   const L = league(), x = expStore();
   if (!x || x.status !== 'announced' || x.yr !== L.season.currentYear) return;
-  if (!(await confirmBox(`Add the ${x.teams.map(s => esc(expName(s))).join(' and ')} to the league? They go into the save now (${L.teams.length} → ${L.teams.length + 2} teams).`, 'Add the Teams'))) return;
+  if (!(await confirmBox(`Begin the expansion draft? The ${x.teams.map(s => esc(expName(s))).join(' and ')} join the league now (${L.teams.length} → ${L.teams.length + 2} teams).`, 'Begin Draft'))) return;
   // Built on a mid-table team's structure (every team field the game expects), with everything of its own reset.
   const tpl = [...L.teams].sort((a, b) => (teamRecord(a).pct ?? 0.5) - (teamRecord(b).pct ?? 0.5))[Math.floor(L.teams.length / 2)];
   // Each new team's id comes after every team and the All-Star teams.
@@ -7011,7 +7011,7 @@ screens.expansion = (args = {}) => {
   let body;
   if (!x || ['none', 'announced'].includes(x.status) && (!due || args.arg === 'edit')) body = expSetupBody();
   else if (due) body = `<fieldset class="frame"><legend>Expansion Day</legend><p class="note">${x.teams.map(s => `<b>${esc(expName(s))}</b>`).join(' and ')} join the league. They go into the save, each hires a head coach, and the coin flip decides the order.</p>
-      <div class="btn-set"><button class="btn off" data-act="nav" data-to="expansion" data-arg="edit">✏️ Edit Plan</button><button class="btn focus" data-act="expCreate">🏟️ Add the Teams</button></div></fieldset>`;
+      <div class="btn-set"><button class="btn off" data-act="nav" data-to="expansion" data-arg="edit">✏️ Edit Plan</button><button class="btn focus" data-act="expCreate">🏟️ Begin Draft</button></div></fieldset>`;
   else if (x.status === 'protect') body = expProtectBody(x);
   else if (x.status === 'draft') body = expDraftBody(x);
   else body = expDoneBody(x);
