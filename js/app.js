@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.316.2';
+const APP_VERSION = '0.317.0';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1512,6 +1512,7 @@ const faDone = day => {
 };
 
 // Each step: when, what, whether it's finished, and what it opens.
+const SUMMER_OFF = true;
 const CALENDAR = [
   { key: 'office', date: 'May 1', title: 'Front Office', blurb: 'Select the teams you run.',
     done: () => calFlags().office },
@@ -1539,7 +1540,7 @@ const CALENDAR = [
     done: () => phaseRank(league().season) >= 3 },
   { key: 'options', date: 'Jun 29', title: 'Contracts', blurb: 'Player options, team options and qualifying offers are due, then the extension window opens.',
     done: () => (!!optStore().done && !!extStore().done) || phaseRank(league().season) >= 4 },
-  { key: 'camp', date: 'Jul 3', title: 'Summer League', blurb: 'Rookies pick their numbers, then the young cores head to Las Vegas.',
+  { key: 'camp', date: 'Jul 3', title: SUMMER_OFF ? 'Rookie Signings' : 'Summer League', blurb: SUMMER_OFF ? 'Your rookies sign their deals and pick their numbers.' : 'Rookies pick their numbers, then the young cores head to Las Vegas.',
     done: () => calFlags().camp || phaseRank(league().season) >= 4 },
   { key: 'fa1', date: 'Jul 6', title: 'Free Agency · Week 1', blurb: 'The market opens and the big deals get done.',
     done: () => faDone(1) },
@@ -1872,6 +1873,8 @@ const nextUp = () => { const st = currentStep(); if (st) toast(`Next up: ${st.ti
 // team is the one the save is built around, like college.
 const isFranchise = () => { const L = league(); return L.season.mode === 0 && L.teams.some(t => t.id === L.season.teamId); };
 // Paused features: steps kept in the code but out of the app until they're ready to show.
+// Summer League (the tournament and the rookies' age adjustment screen) is paused: the step is Rookie Signings, and the
+// age adjustment runs quietly when it wraps up.
 const PAUSED = new Set(['vote', 'exhib', 'rotation']);
 const activeCal = () => (state.campusPro ? campusProCal() : isCollege() ? COLLEGE_CAL : CALENDAR.filter(st => !PAUSED.has(st.key) && (st.key !== 'office' || !(isFranchise() || CAR.isCareer(league()))) && (st.key !== 'latefa' || isComplete()) && (!['owner', 'medical', 'exhib', 'rotation', 'vote'].includes(st.key) || !CAR.isCareer(league())) && (st.key !== 'expansion' || !!expThisYear())));   // a career save runs no team
 const currentStep = () => activeCal().find(st => !st.done());
@@ -1999,7 +2002,7 @@ function stepActions(key) {
     case 'options': return optStore().done
       ? `<div class="grid2"><button class="btn focus" data-act="nav" data-to="extensions">✍️ Extensions</button><button class="btn" data-act="homeSimExt">⏭ Sim</button></div>`
       : `<div class="grid2"><button class="btn focus" data-act="nav" data-to="options">📃 Begin</button><button class="btn" data-act="homeSimContracts">⏭ Sim</button></div>`;
-    case 'camp': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="camp">🌴 Begin</button><button class="btn" data-act="homeSimCamp">⏭ Sim</button></div>`;
+    case 'camp': return `<div class="grid2"><button class="btn focus" data-act="nav" data-to="camp">${SUMMER_OFF ? '✍️' : '🌴'} Begin</button><button class="btn" data-act="homeSimCamp">⏭ ${SUMMER_OFF ? 'Skip' : 'Sim'}</button></div>`;
     case 'fa1': case 'fa2': case 'fa3': {
       const day = +key[2];
       // One button a week: it opens free agency or starts the week as needed and goes straight to the market.
@@ -2342,6 +2345,7 @@ function calendarCard() {
 
 actions.calDone = d => { if (d.k === 'media') applyPresser(); calFlags()[d.k] = true; state.undo = null; render(); };
 actions.calCamp = async () => {
+  if (SUMMER_OFF) return actions.calCampBack();
   if (summerEligible().length && !state.summer[state.leagueIdx] && !summerDone() &&
     !(await confirmBox('Summer league hasn\'t run. Wrap up anyway? Rookies keep the full draft drop.', 'Wrap Up'))) return;
   calFlags().camp = true;
@@ -2604,7 +2608,7 @@ screens.main = () => {
         <img class="hero" src="icons/banner.jpg" alt="Hoop Land">
         <fieldset class="frame"><legend>Hoop Land Plus</legend>
           <div class="stack">
-            <p class="note">Load a <b>Franchise</b> save from the end of the playoffs (Pre-Lottery) and run the whole offseason here: the lottery, the draft, Summer League, free agency and player development. Export once at the end and load it back into Hoop Land. A save from later in the offseason picks up where it left off.</p>
+            <p class="note">Load a <b>Franchise</b> save from the end of the playoffs (Pre-Lottery) and run the whole offseason here: the lottery, the draft, free agency and player development. Export once at the end and load it back into Hoop Land. A save from later in the offseason picks up where it left off.</p>
             <label class="btn big focus"><span class="ico">📂</span> Load Season File
               <input type="file" id="fileInput"></label>
           </div>
@@ -5564,13 +5568,17 @@ actions.rookieSign = d => {
 // Summer League step: rookie deals, numbers, then the tournament.
 screens.camp = () => {
   const ageDone = !!state.summer[state.leagueIdx] || summerDone();
+  if (SUMMER_OFF) {
+    layout({ title: 'Rookie Signings', body: `${rookieDealsCard()}${!leagueRookies(league()).length ? '<p class="note">No rookies this year.</p>' : numbersSection(true)}`, action: { act: 'calCampBack', label: 'Wrap Up' } });
+    return;
+  }
   layout({
     title: 'Summer League',
     body: `${rookieDealsCard()}${!leagueRookies(league()).length ? '<p class="note">No rookies this year.</p>' : ageDone ? '' : ageSection()}${numbersSection(ageDone || !leagueRookies(league()).length)}${tourSection((ageDone || !leagueRookies(league()).length) && numbersReady())}`,
     action: (ageDone || state.summerTour[state.leagueIdx]) && (state.summerTour[state.leagueIdx]?.stage || 'final') === 'final' ? { act: 'calCampBack', label: 'Wrap Up' } : null,
   });
 };
-actions.calCampBack = () => { calFlags().camp = true; state.undo = null; goHome(); toast('Next up: Free Agency'); };
+actions.calCampBack = () => { if (SUMMER_OFF && !(state.summer[state.leagueIdx] || summerDone())) { ageAdjust(); state.compCache = {}; state.dirty = true; } calFlags().camp = true; state.undo = null; goHome(); toast('Next up: Free Agency'); };
 // One tap: progression runs (the first time) and camp opens on its results; Wrap Up is at the bottom of camp.
 actions.devBegin = async () => {
   if (!state.auto[state.leagueIdx]) {
@@ -5907,8 +5915,8 @@ actions.runTour = () => {
 };
 // Sim Summer League from the calendar: the age adjustment, the numbers as they stand, the tournament, wrap up.
 actions.homeSimCamp = () => {
-  if (!(state.summer[state.leagueIdx] || summerDone())) { const { players, points } = ageAdjust(); state.compCache = {}; toast(`Age adjustment: +${points} points back across ${players} rookies`); }
-  simTour();
+  if (!(state.summer[state.leagueIdx] || summerDone())) { const { players, points } = ageAdjust(); state.compCache = {}; if (!SUMMER_OFF) toast(`Age adjustment: +${points} points back across ${players} rookies`); }
+  if (!SUMMER_OFF) simTour();
   calFlags().camp = true;
   state.undo = null;
   state.dirty = true;
@@ -11012,7 +11020,7 @@ screens.draft = (args) => {
       title: 'Draft Room',
       body: rookies.length ? `
         <div class="tabs"><button class="btn on focus">Rookie Class</button></div>
-        <p class="note muted small">The draft is done. Floor = ratings after the −${DRAFT_DROP} drop${state.summer[state.leagueIdx] || summerDone() ? ' and summer league' : ' plus projected summer league recovery (when pre-draft ratings are known)'}; ceiling = top ratings.</p>
+        <p class="note muted small">The draft is done. Floor = ratings after the −${DRAFT_DROP} drop${SUMMER_OFF ? '' : state.summer[state.leagueIdx] || summerDone() ? ' and summer league' : ' plus projected summer league recovery (when pre-draft ratings are known)'}; ceiling = top ratings.</p>
         <div class="list">${rookies.map(r => {
           const c = rookieCompsFor(r.p);
           return `<button class="prow ${isUserTeam(r.team) ? 'sel' : ''}" data-act="openPlayer" data-id="${r.p.id}">
