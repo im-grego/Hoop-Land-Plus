@@ -1803,3 +1803,11 @@ a.btn { text-decoration: none; }
 .pros-chips .grade { margin: 0; }
 /* Lottery: where a traded pick goes, on its own line under the team. */
 .lot-via { display: block; white-space: nowrap; }
+/* Team meeting: each player in his own box with room between, and the coachable ones flagged. */
+.talk-list { gap: 14px; }
+.talk-list > .pq { padding: 10px 12px; background: var(--btn); border: 3px solid var(--btn-edge); }
+.badge.talk-coach { border-color: var(--up); color: var(--up); }
+.badge.talk-uncoach { border-color: var(--down); color: var(--down); }
+.talk-list .btn { overflow-wrap: normal; word-break: normal; hyphens: none; font-size: 15px; padding-left: 8px; padding-right: 8px; }
+.branch-counts { display: grid; gap: 2px; margin: 4px 0; }
+.branch-counts .note { margin: 0; }

@@ -1,5 +1,5 @@
 import {
-  parseSave, serializeSave, injuryHistory, ATTRS, ATTR_NAMES, PHYSICAL, attrMin, skillName, skillCategory, isEliteSkill, isFreeSkill, ELITE_REQUIREMENTS, ELITE_MIN, ATTR_MAX, activeSkills, isLeveled, CATEGORIES, SKILL_MAX_LEVEL, SKILL_CATEGORIES, POSITIONS, MODE_NAMES, phaseName, BUMP_PHASES, BUMP_DAY, POT_MIN, POT_MAX, regressionYear, injuryName, PHASE_POST_DRAFT, PHASE_PRE_DRAFT, PHASE_PRE_LOTTERY, PHASE_FREE_AGENCY, leagueRookies, draftYear, jerseyNumber,
+  parseSave, serializeSave, injuryHistory, ATTRS, ATTR_NAMES, PHYSICAL, attrMin, skillName, skillCategory, sortSkills, isEliteSkill, isFreeSkill, ELITE_REQUIREMENTS, ELITE_MIN, ATTR_MAX, activeSkills, isLeveled, CATEGORIES, SKILL_MAX_LEVEL, SKILL_CATEGORIES, POSITIONS, MODE_NAMES, phaseName, BUMP_PHASES, BUMP_DAY, POT_MIN, POT_MAX, regressionYear, injuryName, PHASE_POST_DRAFT, PHASE_PRE_DRAFT, PHASE_PRE_LOTTERY, PHASE_FREE_AGENCY, leagueRookies, draftYear, jerseyNumber,
   setBlessed, playerName, heightStr, avgRating, lastSeasonMpg, leaguePlayers, snapshot, restore, diffPlayer, jerseyClashes, fixJerseyNumbers, undoJerseyNumbers, levelOf, cloneData, MINOR_INJURY, potCap, ceilTotal, canGrow,
 } from './savefile.js';
 import { collegeProduction, productionWord, setDevPlans, PLAN_ATTRS, DEFAULT_PARAMS, runProgression, buildSkillProfiles, rankSkillsFor, unlockSkill, mulberry32, runRookieBump, injuryRisk, earnsNaturalLongevity, productionScores, spendHeldPoints } from './progression.js';
@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.319.2';
+const APP_VERSION = '0.320.7';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -1295,6 +1295,8 @@ function buildExport() {
   if (state.leagueFile) return buildLeagueExport();
   state.data.seasonLeagues.forEach((L, li) => { if (state.summer[li]) markSummerDone(L); });
   if (!isCollege() && league().season.phase === BUMP_PHASES[0]) spendAllPoints(league());
+  // Skills go into the file best first (a skill that overtook another moves ahead of it).
+  for (const L of state.data.seasonLeagues) for (const p of [...L.teams.flatMap(t => t.roster), ...(L.freeAgents || []), ...(L.draftClass || [])]) sortSkills(p);
   // The game's cap becomes this season's 2nd apron (room for in-season
   // moves), with the max contract tiers scaled so a max is still 25 / 30 /
   // 35% of the real cap.
@@ -1543,7 +1545,7 @@ const CALENDAR = [
     done: () => phaseRank(league().season) >= 3 },
   { key: 'options', date: 'Jun 29', title: 'Contracts', blurb: 'Player options, team options and qualifying offers are due, then the extension window opens.',
     done: () => (!!optStore().done && !!extStore().done) || phaseRank(league().season) >= 4 },
-  { key: 'camp', date: 'Jul 3', title: SUMMER_OFF ? 'Rookie Signings' : 'Summer League', blurb: SUMMER_OFF ? 'Your rookies sign their deals and pick their numbers.' : 'Rookies pick their numbers, then the young cores head to Las Vegas.',
+  { key: 'camp', date: 'Jul 3', title: SUMMER_OFF ? 'Rookie Numbers' : 'Summer League', blurb: SUMMER_OFF ? 'Your rookies pick their jersey numbers.' : 'Rookies pick their numbers, then the young cores head to Las Vegas.',
     done: () => calFlags().camp || phaseRank(league().season) >= 4 },
   { key: 'fa1', date: 'Jul 6', title: 'Free Agency · Week 1', blurb: 'The market opens and the big deals get done.',
     done: () => faDone(1) },
@@ -4651,7 +4653,7 @@ function coachCard() {
   return `<fieldset class="frame"><legend>Coaching Staff</legend>${infoBtn('tokens', '<p class="small"><b>' + COIN_PINK + ' Franchise Tokens</b> buy upgrades in the Coaching Tree. You earn them every season: 1 for completing a season, having a winning record, making the playoffs, a deep run, and a title.</p><p class="small">Each branch (Development, Motivation, Leadership, System) has a set of upgrades; the numbers show how many you own out of the total. Higher rated coaches may start with skills unlocked, and every upgrade stays with your franchise, even with a new coach.</p><p class="small muted">Coins (' + COIN_GOLD + ') are different: they buy arena upgrades.</p>')}<div class="stack">
     <button class="drill-row tap" data-act="nav" data-to="coaches"><span class="grow"><b>${c ? esc(`${c.fn} ${c.ln}`) : 'Head coach'}</b><br><span class="muted small">Head coach · tap for his profile</span></span><span class="small">›</span></button>
     <p class="note small"><b class="gold">${tokTag(coachPoints())}</b> Franchise Tokens to spend${e ? ` · <span class="up">+${e.pts}</span> this offseason (${esc(e.why.map(earnWhy).join(', '))})` : ''}</p>
-    <p class="note small muted">${CO.BRANCHES.map(b => { const ns = CO.NODES[b.k] || []; return ns.length ? `${b.icon} ${b.label} ${ns.filter(n => CO.nodeOwned(treeStore(), c, n, b.k)).length}/${ns.length}` : ''; }).filter(Boolean).join(' · ')}</p>
+    <div class="branch-counts">${CO.BRANCHES.map(b => { const ns = CO.NODES[b.k] || []; return ns.length ? `<p class="note small muted">${b.icon} ${b.label} <b>${ns.filter(n => CO.nodeOwned(treeStore(), c, n, b.k)).length}/${ns.length}</b></p>` : ''; }).filter(Boolean).join('')}</div>
     <p class="note small" style="margin:4px 0 0"><b class="gold">Staff</b></p>
     <div class="grid2"><button class="btn" data-act="nav" data-to="coaches">🧑‍🏫 Coach Profiles</button><button class="btn" data-act="nav" data-to="coachtree">🌳 Coaching Tree</button></div>
     <p class="note small" style="margin:4px 0 0"><b class="gold">Strategy</b></p>
@@ -5574,7 +5576,7 @@ actions.rookieSign = d => {
 screens.camp = () => {
   const ageDone = !!state.summer[state.leagueIdx] || summerDone();
   if (SUMMER_OFF) {
-    layout({ title: 'Rookie Signings', body: `${rookieDealsCard()}${!leagueRookies(league()).length ? '<p class="note">No rookies this year.</p>' : numbersSection(true)}`, action: { act: 'calCampBack', label: 'Wrap Up' } });
+    layout({ title: 'Rookie Numbers', body: `${!leagueRookies(league()).length ? '<p class="note">No rookies this year.</p>' : numbersSection(true)}`, action: { act: 'calCampBack', label: 'Wrap Up' } });
     return;
   }
   layout({
@@ -5733,7 +5735,6 @@ const teamTint = t => {
   const [c1, c2] = (t.teamColors || []).map(c => /^[0-9a-f]{6}$/i.test(c) ? `#${c}` : null);
   return c1 ? `--tc1:${c1};--tc2:${c2 || c1}` : '';
 };
-const jersey = (t, n, cls = '') => `<span class="jersey ${cls}" style="${teamTint(t)}"><span>${n}</span></span>`;
 function setRookieNumber(p, team, n) {
   const ns = numsState();
   if (!(p.id in ns.picks)) ns.picks[p.id] = p.num;
@@ -5765,15 +5766,14 @@ function numbersSection(ready) {
   let body;
   if (!ready) body = '<p class="note muted">Run the age adjustment first.</p>';
   else {
-    body = `${locked ? '' : '<p class="note">Your rookies pick their numbers, the way they do right after the draft. Gold is the number he wore in college; teammates\' numbers and retired jerseys are taken.</p>'}
+    body = `
       <div class="stack">${mine.map(r => {
         const col = collegeNumber(r.p);
         const open = !locked && state.numPick === r.p.id;
         const colFree = col != null && col !== r.p.num && !r.team.roster.some(x => x !== r.p && x.num === col) && !(r.team.retiredNumbers || []).some(x => x.num === col);
+        const numTxt = `#${r.p.num === 100 ? '00' : r.p.num >= 0 ? r.p.num : '–'}`;
         return `<div class="nw-row">
-          ${jersey(r.team, r.p.num)}
-          <span class="grow"><b>${esc(playerName(r.p))}</b><br><span class="muted small">${esc(r.team.shortName)} · ${esc(posName(r.p))}${col != null ? ` · Wore <span class="gold">#${col}</span> in college` : ''}</span></span>
-          ${locked ? '' : `<button class="btn small ${open ? 'on' : ''}" data-act="openWall" data-id="${r.p.id}">${open ? 'Close' : '👕 Pick'}</button>`}
+          <span class="grow"><b>${esc(playerName(r.p))}</b> ${locked ? `<span class="linkish num-chip">${numTxt}</span>` : `<button class="linkish num-chip" data-act="openWall" data-id="${r.p.id}" title="Change his number">${numTxt}</button>`}<br><span class="muted small">${esc(r.team.shortName)} · ${esc(posName(r.p))}${col != null ? ` · Wore <span class="gold">#${col}</span> in college` : ''}</span></span>
         </div>
         ${open ? `${colFree ? `<button class="btn small focus" data-act="pickNumber" data-id="${r.p.id}" data-n="${col}">Keep college #${col}</button>` : ''}${numberWall(r)}` : ''}`;
       }).join('')}</div>
@@ -9994,7 +9994,7 @@ function playerTags(p) {
 }
 // A Hall of Famer: the same profile as an active player, read-only, with the whole career.
 // A retired player's report reads in the past tense: "He threw lobs, put his body on the line and looked to set teammates up."
-const PAST = { is: 'was', has: 'had', can: 'could', "won't": "wouldn't", "doesn't": "didn't", "isn't": "wasn't", lives: 'lived', gets: 'got', finishes: 'finished', pulls: 'pulled', wants: 'wanted',
+const PAST = { brings: 'brought', delivers: 'delivered', is: 'was', has: 'had', can: 'could', "won't": "wouldn't", "doesn't": "didn't", "isn't": "wasn't", lives: 'lived', gets: 'got', finishes: 'finished', pulls: 'pulled', wants: 'wanted',
   creates: 'created', looks: 'looked', catches: 'caught', throws: 'threw', scores: 'scored', crashes: 'crashed', goes: 'went', jumps: 'jumped', pokes: 'poked', stands: 'stood',
   puts: 'put', gives: 'gave', makes: 'made', feeds: 'fed', keeps: 'kept', clamps: 'clamped', locks: 'locked', wins: 'won', plays: 'played', snatches: 'snatched', sparks: 'sparked',
   bullies: 'bullied', leaves: 'left', seems: 'seemed', misses: 'missed', follows: 'followed', stays: 'stayed', coasts: 'coasted', stops: 'stopped', sets: 'set', takes: 'took',
@@ -10045,6 +10045,7 @@ screens.player = (args) => {
   if (!e) { back(); return; }
   const { p, team } = e;
   if (e.hof) { hofProfile(p, args); return; }
+  sortSkills(p);   // best skill first, the same order the export writes
   const snap = snapOf(p);
   const d = diffPlayer(p, snap);
   const ceilMode = !!args.ceil;
@@ -11823,8 +11824,8 @@ const SKILL_COVER = {
   dribble: ['FOO', 'STE'], pass: ['DIM', 'CHE', 'HOT'], oreb: ['CLE', 'MAG'], dreb: ['MAG'], onball: ['CLA', 'LOC'], lanes: ['BAL', 'TWO'], block: ['SNA', 'CLA'],
 };
 // The skills a player has earned (beyond the free ones every player gets).
-const earnedSkills = p => (p.skills || []).filter(x => x.level >= 1 && !isFreeSkill(x.id) && SKILL_INFO[x.id])
-  .sort((a, b) => (isEliteSkill(b.id) - isEliteSkill(a.id)) || b.level - a.level);
+// Every skill he has (the four basic ones too), in the order the player page lists them: best first.
+const earnedSkills = p => { sortSkills(p); return (p.skills || []).filter(x => x.level >= 1 && SKILL_INFO[x.id]); };
 function fullTake(p, f, noGrowth = false) {
   const room = f.k && SKILL_ATTRS.includes(f.k) ? roomFor(p, f.k) : 0;
   const frame = frameRoom(p);
@@ -14721,13 +14722,13 @@ function talksBox(done) {
   return teams.map(t => {
     const budget = TK.talkBudget(headCoachOf(t), tierNow('scheme')), used = talkUsed(t), left = budget - used;
     const rows = t.roster.filter(p => p.tendencies && p.status !== 7).map(p => ({ p, pts: TK.talkPoints(p) })).filter(x => x.pts.length || ts[x.p.id])
-      .sort((a, b) => !!ts[b.p.id] - !!ts[a.p.id] || (b.pts[0]?.score || 0) - (a.pts[0]?.score || 0)).slice(0, 12);
+      .sort((a, b) => shownLevel(b.p) - shownLevel(a.p)).slice(0, 15);   // best players first
     const c = headCoachOf(t), m = (c?.attributes?.motivation?.[0] ?? 0) / 2;
     return `<fieldset class="frame"><legend>🗣️ Player Meetings${teams.length > 1 ? ` · ${esc(t.shortName)}` : ''}</legend>
       <p class="note small"><b>${Math.max(0, left)}</b> of ${budget} talks left${m >= 6 ? ` · ${esc(c.ln)} is a motivator (+${m >= 8 ? 2 : 1})` : ''}${tierNow('scheme') ? ` · coaching tree +${tierNow('scheme')}` : ''}. Coachable players take more from a talk; a habit moves at most ${lim} from where the offseason started.</p>
-      <div class="stack">${rows.map(({ p, pts }) => {
+      <div class="stack talk-list">${rows.map(({ p, pts }) => {
         const did = ts[p.id], coach = coachVal(p);
-        const head = `<p class="note small" style="margin:0"><b>${esc(playerName(p))}</b> ${lvTag(p)} <span class="muted">${p.age}y${coach >= 16 ? ' · 📚 Coachable' : coach <= 4 ? ' · 🙉 Uncoachable' : ''}</span></p>`;
+        const head = `<p class="note small" style="margin:0"><b>${esc(playerName(p))}</b> ${lvTag(p)} <span class="muted">${p.age}y</span>${coach >= 16 ? ' <span class="badge talk-coach">📚 Coachable</span>' : coach <= 4 ? ' <span class="badge talk-uncoach">🙉 Uncoachable</span>' : ''}</p>`;
         if (did) { const T = TK.TOPICS[did.topic], msg = T[did.dir]; return `<div class="pq">${head}<p class="note small">${msg.icon} "${esc(msg.says)}" ${did.changes.length ? did.changes.map(([k, a, b]) => `<span class="${b > a ? 'up' : 'down'}">${esc(TEND_LABELS[k] || k)} ${a > 0 ? '+' : ''}${a}→${b > 0 ? '+' : ''}${b}</span>`).join(' · ') : '<span class="down">He tuned it out.</span>'}</p>${done ? '' : `<button class="btn tiny off" data-act="talkUndo" data-id="${p.id}">Take it back</button>`}</div>`; }
         if (done) return '';
         return `<div class="pq">${head}${pts.map(x => { const T = TK.TOPICS[x.topic], w = x.why; return `<p class="note small muted" style="margin:4px 0 2px">${esc(T.label)}: ${esc(ATTR_NAMES[w.a] || w.a)} ${w.r} with a habit of ${w.t > 0 ? '+' : ''}${w.t}${x.fit === 'down' && w.capped ? ` · <span class="down">🚫 bad habit, can't reach 10 (ceiling ${w.ceil})</span>` : ''}</p>
@@ -14766,7 +14767,7 @@ screens.meeting = () => {
   const c = myCoach();
   layout({
     title: 'Team Meeting',
-    body: `${done ? meetingResultsBox() : `<p class="note small">Sit your players down one at a time: each talk is one message about his game, chosen from where his ratings and his habits disagree. When the meeting ends, the group's makeup shifts with the coach (leadership for winning, locker room, ego and loyalty; motivation for motor, durability and money).</p>`}
+    body: `${done ? meetingResultsBox() : `<p class="note small">Sit your players down one at a time: each talk is one message about his game, chosen from where his ratings and his habits disagree.</p>`}
       ${talksBox(done)}
       ${proposalBox()}
       ${coachCard()}`,
@@ -15736,6 +15737,7 @@ screens.options = () => {
     title: 'Options Deadline',
     body: `<p class="note small">Accept a team option to keep his last year at the same salary, or decline it to let him go. Picked-up options can be extended right after, in the extension window.</p>
       ${careerTeamNow() ? viewOnlyNote() : ''}${uiTabs('options', [
+        ...(rookieDealsCard() ? [['rookies', 'Rookies', rookieDealsCard()]] : []),
         ['team', 'Team', `      <fieldset class="frame"><legend>Your Team Options</legend><div class="stack">${myTeamOpts.map(x => { const deal = st.deals?.[x.p.id], neg = st.neg?.[x.p.id]; return `<div class="drill-row wrap">${head(x)}
         <span class="opt-btns full">${btn('optTeam', x.p.id, 'ex', x.c.choice === 'ex', 'Accept')}${btn('optTeam', x.p.id, 'dec', x.c.choice === 'dec', 'Decline')}</span>
         ${x.c.choice === 'ex' ? `<p class="note small up full">${done ? 'Picked up: he can be extended in the extension window.' : 'Picked up: once decisions are final you can talk extension.'}</p>` : ''}</div>`; }).join('') || '<p class="note muted small">No team options this year.</p>'}</div></fieldset>`, !done && myTeamOpts.some(x => !x.c.choice)],

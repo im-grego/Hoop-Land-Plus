@@ -130,6 +130,16 @@ export const SKILL_NAMES = {
 };
 export const skillName = id => SKILL_NAMES[id] || id;
 export const skillCategory = id => SKILL_CATEGORIES.find(c => c.skills.includes(id))?.name || '';
+// A player's skills in the order the game lists them: higher level first; a tie goes to the skill whose category
+// (Finishing, Shooting, Creating, Defense) he has more rating points in. Skills not yet earned stay at the end.
+export function sortSkills(p) {
+  if (!Array.isArray(p?.skills) || p.skills.length < 2) return false;
+  const pts = id => { const c = CATEGORIES.find(x => x.name === skillCategory(id)); return c ? c.attrs.reduce((a, k) => a + (+p.attributes?.[k]?.[0] || 0), 0) : 0; };
+  const before = p.skills.map(x => x.id).join();
+  const idx = new Map(p.skills.map((x, i) => [x, i]));
+  p.skills.sort((a, b) => ((b.level >= 1) - (a.level >= 1)) || (b.level - a.level) || (pts(b.id) - pts(a.id)) || (idx.get(a) - idx.get(b)));
+  return p.skills.map(x => x.id).join() !== before;
+}
 export const FREE_SKILLS = SKILL_CATEGORIES.map(c => c.skills[0]);
 export const ELITE_SKILLS = SKILL_CATEGORIES.flatMap(c => c.skills.slice(4));
 // Elite skills need 16/20 in a related rating to be earned (the game hands

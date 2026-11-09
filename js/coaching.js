@@ -12,7 +12,7 @@
 export const BRANCHES = [
   { k: 'dev', label: 'Development', icon: '📈', rating: 'development',
     tiers: ['+10% offseason progression, +15% potential odds', '+20% progression, +30% potential odds', '+30% progression, +45% potential odds'] },
-  { k: 'culture', label: 'Motivation', icon: '🤝', rating: 'motivation',
+  { k: 'culture', label: 'Motivation', icon: '💪', rating: 'motivation',
     tiers: ['+1 Locker Room and Loyalty (up to 14) · +10% recruiting pull', '+2 (up to 16) · +20% recruiting pull', '+3 (up to 18) · +30% recruiting pull'] },
   { k: 'scheme', label: 'Leadership', icon: '🧠', rating: 'leadership',
     tiers: ['2 influence per player', '3 influence per player', '4 influence per player; a tendency can move 3'] },

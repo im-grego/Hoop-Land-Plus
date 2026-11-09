@@ -97,6 +97,8 @@ export function styleSentence(p) {
 // what he won't do set against them by "but". No list runs past two items, so no "and ... and ... and".
 const DEFENSE = new Set(['protector', 'pest', 'charge']), BOARDS = new Set(['glass']);
 const pair = a => (a.length > 1 ? `${a[0]} and ${a[1]}` : a[0] || '');
+// Every item: "a, b and c".
+const list = a => (a.length > 2 ? `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}` : pair(a));
 // His best offensive rating as a phrase, for a player with no style that stands out on offense: what he'd be known for.
 const TOOL = { TPT: 'can stretch the floor', MID: 'can hit the midrange shot', LAY: 'finishes around the basket', DNK: 'can throw it down', INS: 'scores inside', DRB: 'handles the ball well', PAS: 'moves the ball well' };
 // Each rating against the league (how far above its average), so a big's ordinary three-point rating doesn't outrank the
@@ -116,18 +118,18 @@ export function playRead(p, skills = []) {
   if (!off.length && bestTool(p)) off.push(bestTool(p));
   const def = st.filter(x => DEFENSE.has(x.k) || BOARDS.has(x.k)).slice(0, 2);
   const defT = def.map(x => x.text);
-  const wont = wontDo(p).slice(0, 2), sk = skills.filter(Boolean).slice(0, 2);
+  const wont = wontDo(p).slice(0, 2), sk = skills.filter(Boolean).slice(0, 4);   // his best four skills
   const out = [];
   let first = '';
   if (off.length && def.length) first = `He ${pair(off)}, and ${def.some(x => DEFENSE.has(x.k)) ? 'on defense he' : 'he'} ${pair(defT)}`;
   else if (off.length || def.length) first = `He ${pair(off.length ? off : defT)}`;
   else if (!sk.length) first = 'He has no strong lean in his game';
   const short = !(off.length && def.length);   // one clause so far: room for a "but"
-  if (first && wont.length && !sk.length && short) { out.push(`${first}, but he ${pair(wont)}.`); return out.join(' '); }
+  if (first && wont.length && !sk.length && short) { out.push(`${first}. However, he ${pair(wont)}.`); return out.join(' '); }
   if (first) out.push(`${first}.`);
-  if (sk.length && wont.length) out.push(`He ${pair(sk)}, but he ${pair(wont)}.`);
-  else if (sk.length) out.push(first ? `On top of that, he ${pair(sk)}.` : `He ${pair(sk)}.`);
-  else if (wont.length) out.push(`He ${pair(wont)}, though.`);
+  if (sk.length && wont.length) out.push(`He ${list(sk)}. However, he ${pair(wont)}.`);
+  else if (sk.length) out.push(first ? `On top of that, he ${list(sk)}.` : `He ${list(sk)}.`);
+  else if (wont.length) out.push(`However, he ${pair(wont)}.`);
   return out.join(' ');
 }
 
