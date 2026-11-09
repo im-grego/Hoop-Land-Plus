@@ -70,7 +70,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.314.0';
+const APP_VERSION = '0.314.1';
 const $app = document.getElementById('app');
 // Pixel icons: the emoji that starts a button becomes a white pixel icon, like the game's (Settings → Pixel icons).
 {
@@ -459,7 +459,8 @@ function toast(msg, detail = '', ms = detail ? 4000 : 2400, warning = false) {
 
 // ⓘ in a box's corner: the explanation opens on tap instead of taking up room on the page.
 const INFO = {};
-const infoBtn = (key, text) => { INFO[key] = text; return `<button class="info-i" data-act="infoPop" data-k="${esc(key)}" aria-label="What this means">?</button>`; };
+const INFO_TITLE = {};
+const infoBtn = (key, text, title = '') => { INFO[key] = text; if (title) INFO_TITLE[key] = title; return `<button class="info-i" data-act="infoPop" data-k="${esc(key)}" aria-label="What this means">?</button>`; };
 function overlay(html) {
   const o = document.createElement('div');
   o.className = 'overlay';
@@ -11239,9 +11240,11 @@ screens.capital = (args = {}) => {
   };
   // The real trade behind a pick (or a swap) the real-picks list placed, behind a ?.
   const team = id => L.teams.find(x => x.id === id);
+  const notes = pickNotes();
   const realWhy = (yr, rd, from, to) => {
-    const n = RP.tradeNote(L, yr, rd, team(from), team(to));
-    return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p><b>${yr} round ${rd}: ${esc(name(from))} to ${esc(name(to))}</b></p><p>${esc(n)}.</p><p class="small muted">The real-world deal behind it (as of November 2026). Protections are rounded to the ones trades use here: top 3, top 8 or lottery.</p>`)}` : '';
+    const app = notes[`${from}:${yr}:${rd}`];
+    const n = app && app.to === to ? app.text : RP.tradeNote(L, yr, rd, team(from), team(to));
+    return n ? ` ${infoBtn(`cap:${yr}:${rd}:${from}:${to}`, `<p>${esc(n)}.</p>`, `${yr} R${rd}: ${name(from)} → ${name(to)}`)}` : '';
   };
   let held1 = 0, held2 = 0, out = 0, total = 0;
   const yearBlocks = years.map(yr => {
@@ -13080,7 +13083,27 @@ const offKey = name => `hlc:${name}:${saveTag()}:${seasonKey()}`;
 function offGet(name) { try { return JSON.parse(localStorage.getItem(offKey(name))) || {}; } catch { return {}; } }
 function offSet(name, v) { try { localStorage.setItem(offKey(name), JSON.stringify(v)); } catch { /* ignore */ } }
 // Every player trade this offseason, in order: { pid, from, to } by team id.
+const pickNoteKey = () => `hlc:picknotes:${saveTag()}`;
+const pickNotes = () => { try { return JSON.parse(localStorage.getItem(pickNoteKey())) || {}; } catch { return {}; } };
+const pickKey = pk => `${pk.otid}:${pk.yr}:${pk.rd}`;
+function notePickTrade(kind, rec) {
+  const notes = pickNotes(), s = league().season;
+  const when = `${s.currentYear}${phaseRank(s) >= 1 ? ' offseason' : ''}`;
+  const got = side => {
+    const ps = rec.moved.filter(m => m.from === side).map(m => m.p).sort((a, b) => shownLevel(b) - shownLevel(a)).map(p => playerName(p));
+    const pks = (side === rec.A ? rec.picksA : rec.picksB) || [];
+    const bits = [...ps.slice(0, 2), ps.length > 2 ? `${ps.length - 2} more` : '', pks.length ? `${pks.length} pick${pks.length > 1 ? 's' : ''}` : ''].filter(Boolean);
+    return bits.length ? bits.join(', ') : 'nothing back';
+  };
+  for (const [picks, from, to] of [[rec.picksA, rec.A, rec.B], [rec.picksB, rec.B, rec.A]]) for (const pk of picks || []) {
+    const k = pickKey(pk);
+    if (kind === 'do') notes[k] = { from: from.id, to: to.id, text: `${from.shortName} traded it to ${to.shortName} for ${got(to)} (${when})` };
+    else if (notes[k]?.to === to.id) delete notes[k];
+  }
+  try { localStorage.setItem(pickNoteKey(), JSON.stringify(notes)); } catch { /* a convenience */ }
+}
 setTradeHook((kind, rec) => {
+  try { notePickTrade(kind, rec); } catch { /* a convenience */ }
   try {
     const led = offGet('moves'), list = Array.isArray(led.list) ? led.list : [];
     for (const m of rec.moved) {
@@ -17330,8 +17353,11 @@ screens.teamStats = (args) => {
       ${rows.map((x, i) => `<div class="ts-row ${isUserTeam(x.t) ? 'mine' : ''}"><span class="muted">${i + 1}</span><span class="grow"><b>${esc(x.t.shortName)}</b></span>${TEAM_STAT_COLS.map(c => `<span class="${c === col ? 'on' : ''}">${fmt(c, c[2](x.r))}</span>`).join('')}</div>`).join('')}</div>`,
   });
 };
-actions.infoPop = d => {
-  const o = overlay(`<div class="info-head">Info</div><div class="info-text">${INFO[d.k] || ''}</div><button class="btn" data-close>Got it</button>`);
+actions.infoPop = (d, el) => {
+  const sec = el?.closest('fieldset')?.querySelector(':scope > legend')?.textContent?.trim();
+  const scr = state.stack[state.stack.length - 1]?.name;
+  const title = INFO_TITLE[d.k] || sec || $app.querySelector('.marquee')?.getAttribute('aria-label') || scr || 'Info';
+  const o = overlay(`<div class="info-head">${esc(title)}</div><div class="info-text">${INFO[d.k] || ''}</div><button class="btn" data-close>Got it</button>`);
   o.querySelector('.box')?.classList.add('info-box');
   o.querySelector('.cg-lv.here')?.scrollIntoView({ block: 'center' });   // the salary guide opens on your level
   o.addEventListener('click', e => { if (e.target === o || e.target.closest('[data-close]')) o.remove(); });
