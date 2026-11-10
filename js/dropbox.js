@@ -5,14 +5,15 @@
 const KEY = 'hlc:dropbox';
 // The app's own Dropbox app key (public; PKCE needs no secret). When set,
 // nobody has to create a Dropbox app: Connect just works.
-export const BUILT_IN_APP_KEY = '';
+export const BUILT_IN_APP_KEY = 'yo328m6ytsdzugc';
 const AUTH_URL = 'https://www.dropbox.com/oauth2/authorize';
 const TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
 const UPLOAD_URL = 'https://content.dropboxapi.com/2/files/upload';
 const DOWNLOAD_URL = 'https://content.dropboxapi.com/2/files/download';
+const API = 'https://api.dropboxapi.com/2';
 
 export function dropboxConfig() {
-  const base = { folder: '/Hoop Land', overwrite: false, appKey: BUILT_IN_APP_KEY || '' };
+  const base = { folder: BUILT_IN_APP_KEY ? '' : '/Hoop Land', overwrite: false, appKey: BUILT_IN_APP_KEY || '' };
   try { const c = { ...base, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; if (!c.appKey) c.appKey = base.appKey; return c; }
   catch { return base; }
 }
@@ -27,13 +28,13 @@ export const disconnectDropbox = () => saveDropboxConfig({ refreshToken: null, a
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 // Step 1: returns the URL to open; the verifier is kept for step 2.
-export async function dropboxAuthUrl(appKey) {
+export async function dropboxAuthUrl(appKey, redirect = null) {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
-  saveDropboxConfig({ appKey, verifier });
+  saveDropboxConfig({ appKey, verifier, redirect });
   const q = new URLSearchParams({
     client_id: appKey, response_type: 'code', code_challenge: challenge,
-    code_challenge_method: 'S256', token_access_type: 'offline',
+    code_challenge_method: 'S256', token_access_type: 'offline', ...(redirect ? { redirect_uri: redirect } : {}),
   });
   return `${AUTH_URL}?${q}`;
 }
@@ -49,8 +50,8 @@ async function tokenRequest(body) {
 export async function dropboxFinishAuth(code) {
   const c = dropboxConfig();
   if (!c.appKey || !c.verifier) throw new Error('Start the connection again.');
-  const t = await tokenRequest({ code: code.trim(), grant_type: 'authorization_code', code_verifier: c.verifier, client_id: c.appKey });
-  saveDropboxConfig({ verifier: null, refreshToken: t.refresh_token, accessToken: t.access_token, expires: Date.now() + (t.expires_in - 60) * 1000 });
+  const t = await tokenRequest({ code: code.trim(), grant_type: 'authorization_code', code_verifier: c.verifier, client_id: c.appKey, ...(c.redirect ? { redirect_uri: c.redirect } : {}) });
+  saveDropboxConfig({ verifier: null, redirect: null, refreshToken: t.refresh_token, accessToken: t.access_token, expires: Date.now() + (t.expires_in - 60) * 1000 });
 }
 
 async function accessToken() {
@@ -112,4 +113,29 @@ export async function dropboxGet(path) {
   if (res.status === 409) return null;
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   return res.text();
+}
+
+// An RPC call with one retry on an expired token.
+async function apiCall(route, body) {
+  const send = async token => fetch(`${API}/${route}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let res = await send(await accessToken());
+  if (res.status === 401) { saveDropboxConfig({ accessToken: null, expires: 0 }); res = await send(await accessToken()); }
+  return { res, json: await res.json().catch(() => ({})) };
+}
+// The file's share link (the kind you'd copy in the Dropbox app), made once and reused after that.
+export async function dropboxShareLink(path) {
+  let { res, json } = await apiCall('sharing/create_shared_link_with_settings', { path, settings: { audience: 'public', access: 'viewer' } });
+  if (res.ok) return json.url;
+  if (json.error?.['.tag'] === 'shared_link_already_exists' && json.error.shared_link_already_exists?.metadata?.url) return json.error.shared_link_already_exists.metadata.url;
+  ({ res, json } = await apiCall('sharing/list_shared_links', { path, direct_only: true }));
+  if (res.ok && json.links?.length) return json.links[0].url;
+  throw new Error(json.error_summary || `Couldn't make a share link (${res.status})`);
+}
+// Upload a file in place (one file per save name, so its share link stays the same export after export).
+export async function dropboxUploadFixed(blob, name) {
+  const path = dropboxPath(name, dropboxConfig().folder);
+  const res = await contentCall(UPLOAD_URL, { path, mode: 'overwrite', autorename: false, mute: true }, blob);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error_summary || `Upload failed (${res.status})`);
+  return json.path_display || path;
 }

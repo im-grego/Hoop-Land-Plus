@@ -68,9 +68,9 @@ import { JERSEYS } from './jerseys.js';
 import { leagueCuts, TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
 import { presserQuestions, presserStories, promiseStories, leagueGram, teamSituation, playerReplies, setHoldouts } from './presser.js';
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
-import { BUILT_IN_APP_KEY, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
+import { BUILT_IN_APP_KEY, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.324.2';
+const APP_VERSION = '0.325.0';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.1.0';
 const $app = document.getElementById('app');
@@ -19776,15 +19776,16 @@ screens.export = () => {
         <p class="note file-name">${esc(state.fileName)}</p>
         ${(() => { const L = league(); if (isCollege() || L.season.phase !== BUMP_PHASES[0] || calFlags().cuts) return ''; const over = overFifteen(L), mineOver = over.filter(isUserTeam); return over.length ? `<p class="note small ${mineOver.length ? 'down' : 'gold'}">✂️ Roster Finalization isn't done: ${over.length} team${over.length === 1 ? ' is' : 's are'} over 15. ${mineOver.length ? `<b>${mineOver.map(t => esc(t.shortName)).join(', ')}</b> ${mineOver.length === 1 ? 'is yours' : 'are yours'}: make your cuts first, or the game cuts for you without looking at ratings. ` : ''}The CPU teams make their cuts when you export.</p>` : ''; })()}
         ${CAR.isCareer(league()) && state.ledgerIn ? Object.entries(LEDGER).map(([k, d]) => `<p class="note small">${d.icon} ${d.label}: ${ledgerIn(k).toLocaleString()} when loaded ${ledgerNet(k) >= 0 ? '+' : '−'} ${Math.abs(ledgerNet(k)).toLocaleString()} in the app = <b>${Math.max(0, ledgerIn(k) + ledgerNet(k)).toLocaleString()}</b> written to the file. <button class="btn tiny" data-act="nav" data-to="ledger" data-arg="${k}">Ledger</button></p>`).join('') : ''}
+        ${dbxOn() ? dbxShareBox() : ''}
         <div class="stack">
-          <button class="btn big focus" data-act="download">💾 Download File</button>
+          <button class="btn ${dbxOn() ? '' : 'big focus'}" data-act="download">💾 Download File</button>
         </div>
-        <ol class="note small dl-steps">
+        ${dbxOn() && dropboxConnected() ? '' : `<ol class="note small dl-steps">
           <li>Download the file.</li>
           <li>Upload it to your Dropbox.</li>
           <li>Copy the file's Dropbox link.</li>
           <li>In Hoop Land, import a season and paste the link.</li>
-        </ol>
+        </ol>`}
         ${inArtifact() ? `<p class="note gold small">Saves as <b>${esc(artifactName(state.fileName))}</b>: rename it to <b>${esc(state.fileName)}</b> (remove ".json") so Hoop Land can load it.</p>` : ''}
         <p class="note muted small">Keep a backup of your original file.</p>
       </fieldset>
@@ -19865,6 +19866,67 @@ async function dbxSend(blob, name, what) {
     return false;
   }
 }
+
+// ---- One-tap Dropbox (the app's own Dropbox app, an App folder): connect once, then each export uploads the file
+// and copies its share link, ready to paste into Hoop Land's season import. Behind a switch while it's tested on the
+// live site: hooplandplus.com/?dropbox=on turns it on for that browser (?dropbox=off turns it off); local builds always.
+const DBX_FLAG = 'hlc:dbxbeta';
+const dbxOn = () => !!BUILT_IN_APP_KEY && !inArtifact() && ((() => { try { return localStorage.getItem(DBX_FLAG) === '1'; } catch { return false; } })() || !counting());
+(() => {
+  const q = new URLSearchParams(location.search);
+  const sw = q.get('dropbox');
+  try { if (sw === 'on') localStorage.setItem(DBX_FLAG, '1'); else if (sw === 'off') localStorage.removeItem(DBX_FLAG); } catch { /* ignore */ }
+  const code = q.get('code');
+  if (code && dropboxConfig().verifier) {
+    history.replaceState(null, '', location.pathname);
+    dropboxFinishAuth(code).then(() => { countEvent('dropbox-connected'); toast('☁ Dropbox connected', 'You can close this tab and go back to Hoop Land Plus.', 8000); render(); })
+      .catch(e => toast('Dropbox didn\'t connect', e.message, 6000, true));
+  } else if (sw) history.replaceState(null, '', location.pathname);
+})();
+// The other tab finished connecting: show the new button here too.
+window.addEventListener('storage', e => { if (e.key === 'hlc:dropbox' && state.data) render(); });
+function dbxShareBox() {
+  if (dropboxConnected()) return `<div class="stack"><button class="btn big focus" data-act="dbxShare">📤 Upload &amp; Copy Link</button>
+    <p class="note small">Uploads to your Dropbox and copies the link. Then in Hoop Land, import a season and paste it.</p></div>`;
+  const c = dropboxConfig();
+  return `<div class="stack"><button class="btn big focus" data-act="dbxConnectOnce">🌐 Connect Dropbox (one time)</button>
+    <p class="note small muted">After this, every export is one tap: the file goes to your Dropbox and the link is copied for Hoop Land.</p>
+    ${c.verifier && !c.redirect ? `<label class="field"><span>Code from Dropbox</span><input type="text" id="dbxCode" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <button class="btn focus" data-act="dbxFinish">✅ Finish Connecting</button>` : ''}</div>`;
+}
+// The installed app keeps its own storage, apart from the browser, so it can't take Dropbox's redirect: there Dropbox
+// shows a code to paste. In a browser tab the sign-in opens in a new tab and comes straight back.
+actions.dbxConnectOnce = async () => {
+  const installed = runningInstalled();
+  const w = window.open('', '_blank');
+  const url = await dropboxAuthUrl(BUILT_IN_APP_KEY, installed ? null : `${location.origin}/`);
+  if (w) w.location = url; else location.assign(url);
+  render();
+  toast(installed ? 'Allow access, then paste the code here' : 'Allow access in the new tab', '', 4000);
+};
+actions.dbxShare = async () => {
+  const o = overlay('<div class="spinner"></div><p class="note">Uploading to Dropbox…</p>');
+  // Start the clipboard write inside the tap (Safari needs it there), filled in when the link is ready.
+  const work = (async () => { await nextFrame(); const file = buildExport(); const path = await dropboxUploadFixed(file, file.name); return dropboxShareLink(path); })();
+  let copied = false;
+  const early = (window.ClipboardItem && navigator.clipboard?.write)
+    ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': work.then(u => new Blob([u], { type: 'text/plain' })) })]).then(() => { copied = true; }).catch(() => {})
+    : Promise.resolve();
+  let link;
+  try { link = await work; } catch (e) { o.remove(); toast('Upload failed', e.message, 6000, true); return; }
+  await early;
+  if (!copied) { try { await navigator.clipboard.writeText(link); copied = true; } catch { /* the box below has a Copy button */ } }
+  o.remove();
+  state.dirty = false;
+  countEvent('dropbox-share');
+  const box = overlay(`<p class="note"><b>${copied ? '✅ Link copied' : 'Your link is ready'}</b></p>
+    <p class="note small">In Hoop Land, import a season and paste it.</p>
+    <input type="text" class="sel-team" readonly value="${esc(link)}" style="width:100%">
+    <div class="grid2" style="margin-top:8px"><button class="btn focus" data-act="dbxCopyAgain">📋 Copy Again</button><button class="btn off" data-act="dbxCloseBox">Done</button></div>`);
+  state.dbxLink = link; state.dbxBox = box;
+};
+actions.dbxCopyAgain = async () => { try { await navigator.clipboard.writeText(state.dbxLink || ''); toast('Link copied'); } catch { const i = state.dbxBox?.querySelector('input'); i?.select(); toast('Select the link and copy it'); } };
+actions.dbxCloseBox = () => { state.dbxBox?.remove(); state.dbxBox = null; };
 
 actions.dbxUpload = async () => {
   const o = overlay('<div class="spinner"></div><p class="note">Building file…</p>');
