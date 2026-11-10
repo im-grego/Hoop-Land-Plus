@@ -1,6 +1,6 @@
 // Offline support: cache-first for the app shell, stale-while-revalidate for
 // fonts and team logos.
-const VERSION = 'hlc-v0.325.4';
+const VERSION = 'hlc-v0.324.3';
 const SHELL = [
   './',
   'index.html',
