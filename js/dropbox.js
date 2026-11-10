@@ -139,3 +139,33 @@ export async function dropboxUploadFixed(blob, name) {
   if (!res.ok) throw new Error(json.error_summary || `Upload failed (${res.status})`);
   return json.path_display || path;
 }
+
+// A Dropbox share link as a direct download (dl.dropboxusercontent.com, dl=1), and the file's name from its path.
+export function dropboxLinkInfo(link) {
+  let u;
+  try { u = new URL(String(link || '').trim()); } catch { throw new Error('Paste the whole Dropbox link.'); }
+  if (!/(^|\.)dropbox(usercontent)?\.com$/i.test(u.hostname)) throw new Error('That isn\'t a Dropbox link.');
+  const name = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || 'season');
+  const direct = new URL(u.toString());
+  direct.hostname = 'dl.dropboxusercontent.com';
+  direct.searchParams.set('dl', '1');
+  return { name, direct: direct.toString(), shared: u.toString() };
+}
+// Read a shared file: straight from Dropbox's download address; if that's refused and Dropbox is connected, through
+// the API (sharing/get_shared_link_file).
+export async function dropboxFetchShared(link) {
+  const info = dropboxLinkInfo(link);
+  try {
+    const r = await fetch(info.direct);
+    if (r.ok) { const text = await r.text(); if (text && !/^\s*<!doctype html|^\s*<html/i.test(text)) return { text, name: info.name }; }
+  } catch { /* fall through to the API */ }
+  if (dropboxConnected()) {
+    const res = await fetch('https://content.dropboxapi.com/2/sharing/get_shared_link_file', {
+      method: 'POST', headers: { Authorization: `Bearer ${await accessToken()}`, 'Dropbox-API-Arg': headerJson({ url: info.shared }) },
+    });
+    if (res.ok) return { text: await res.text(), name: info.name };
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error_summary || `Dropbox said ${res.status}`);
+  }
+  throw new Error('Dropbox wouldn\'t hand the file over. Connect Dropbox on the Export screen, or download the file and load it.');
+}

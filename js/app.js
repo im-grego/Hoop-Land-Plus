@@ -68,9 +68,9 @@ import { JERSEYS } from './jerseys.js';
 import { leagueCuts, TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
 import { presserQuestions, presserStories, promiseStories, leagueGram, teamSituation, playerReplies, setHoldouts } from './presser.js';
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
-import { BUILT_IN_APP_KEY, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
+import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.325.0';
+const APP_VERSION = '0.325.4';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.1.0';
 const $app = document.getElementById('app');
@@ -766,6 +766,21 @@ async function loadTraitsFile(data) {
     toast('Traits file kept', `They load with that save (${data.save}, team ${data.team}).`);
   }
 }
+// Load from a Dropbox share link instead of a file: the same load once the file is in hand.
+function linkLoadBox(small = false) {
+  return `<div class="link-load ${small ? 'small' : ''}"><input type="url" id="linkIn" class="sel-team" placeholder="Paste a Dropbox link" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn ${small ? 'small' : ''}" data-act="loadLink">🔗 Load Link</button></div>`;
+}
+actions.loadLink = async () => {
+  const link = document.getElementById('linkIn')?.value?.trim();
+  if (!link) { toast('Paste a Dropbox link first'); return; }
+  const o = overlay('<div class="spinner"></div><p class="note">Getting the file from Dropbox…</p>');
+  try {
+    const { text, name } = await dropboxFetchShared(link);
+    o.remove();
+    countEvent('load-link');
+    await loadFile(new File([text], name, { type: 'application/octet-stream' }));
+  } catch (e) { o.remove(); toast('Couldn\'t load that link', e.message, 7000, true); }
+};
 async function loadFile(file) {
   // A traits file doesn't replace the save: no unsaved-changes question for it.
   if (file.size < 3e6) { try { const d = JSON.parse(await file.text()); if (isTraitsBackup(d)) return loadTraitsFile(d); } catch { /* not JSON: a save */ } }
@@ -1328,6 +1343,27 @@ function exportCuts(L) {
   return log;
 }
 let restoreCap = null;
+// Hoop Land's season files have no extension, and the game won't import one with ".json" on it (the Claude preview
+// adds it to downloads): the file goes out under the game's own name.
+const gameFileName = name => String(name || 'season').replace(/\.json$/i, '');
+// The exported season, named the way people talk about it: "Hornets Year 3 2029". The team is yours (the career
+// player's team in Career; the league's short name when you run several); the year count starts at the franchise's
+// first season, read from the save's name ("NBA 2027"), else its starting year (unless the 1977 history option moved
+// that), else the first season this app saw; the last number is the season being exported into.
+function seasonFileName() {
+  try {
+    const L = league(), y = L.season.currentYear;
+    const mine = L.teams.filter(isUserTeam), car = CAR.isCareer(L) ? careerTeamNow() : null;
+    const t = car || (mine.length === 1 ? mine[0] : L.teams.find(x => x.id === L.season.teamId) || null);
+    const who = String(t?.name || L.shortName || 'Season').replace(/[\\/:*?"<>|]/g, '').trim();
+    const fromName = +(String(L.meta?.saveName || '').match(/\b(20\d\d)\b/) || [])[1] || 0;
+    const key = `hlc:firstyear:${saveTag()}`;
+    let seen = 0; try { seen = +localStorage.getItem(key) || 0; if (!seen) localStorage.setItem(key, String(y)); } catch { /* ignore */ }
+    const sy = L.season.startingYear || 0;
+    const start = [fromName, sy >= y - 40 ? sy : 0, seen || y].find(v => v > 0 && v <= y) || y;
+    return `${who} Year ${y - start + 1} ${y}`;
+  } catch { return gameFileName(state.fileName); }
+}
 function buildExport() {
   restoreCap = null;
   if (state.leagueFile) return buildLeagueExport();
@@ -1391,7 +1427,7 @@ function buildExport() {
   if (restoreCap) { [league().season.salaryCap, league().season.maxContract] = restoreCap; restoreCap = null; }
   for (const p of shut) p.contract.canExt = true;
   for (const p of stamped) p.history.draft.yr++;
-  return new File([text], state.fileName, { type: 'application/octet-stream' });
+  return new File([text], dbxOn() ? seasonFileName() : gameFileName(state.fileName), { type: 'application/octet-stream' });
 }
 
 // Running as a claude.ai artifact: files are saved through the viewer's
@@ -2703,6 +2739,7 @@ screens.main = () => {
             <p class="note">Load a <b>Franchise</b> save from the end of the playoffs (Pre-Lottery) and run the whole offseason here: the lottery, the draft, free agency and player development. Export once at the end and load it back into Hoop Land. A save from later in the offseason picks up where it left off.</p>
             <label class="btn big focus"><span class="ico">📂</span> Load Season File
               <input type="file" id="fileInput"></label>
+            ${dbxOn() ? linkLoadBox() : ''}
           </div>
         </fieldset>
         <div id="installSlot">${installCard()}</div>
@@ -2742,6 +2779,7 @@ screens.main = () => {
         <label class="btn left"><span class="ico">📂</span> Load<input type="file" id="fileInput"></label>
         <button class="btn left" data-act="nav" data-to="export"><span class="ico">💾</span> Export</button>
       </div>
+      ${dbxOn() ? linkLoadBox(true) : ''}
       ${footerGrid()}`,
   });
 };
@@ -19773,7 +19811,7 @@ screens.export = () => {
     body: `
       ${jerseyCard()}${gearCard()}
       <fieldset class="frame"><legend>Season File</legend>
-        <p class="note file-name">${esc(state.fileName)}</p>
+        <p class="note file-name">${esc(state.leagueFile ? state.fileName : dbxOn() ? seasonFileName() : gameFileName(state.fileName))}</p>
         ${(() => { const L = league(); if (isCollege() || L.season.phase !== BUMP_PHASES[0] || calFlags().cuts) return ''; const over = overFifteen(L), mineOver = over.filter(isUserTeam); return over.length ? `<p class="note small ${mineOver.length ? 'down' : 'gold'}">✂️ Roster Finalization isn't done: ${over.length} team${over.length === 1 ? ' is' : 's are'} over 15. ${mineOver.length ? `<b>${mineOver.map(t => esc(t.shortName)).join(', ')}</b> ${mineOver.length === 1 ? 'is yours' : 'are yours'}: make your cuts first, or the game cuts for you without looking at ratings. ` : ''}The CPU teams make their cuts when you export.</p>` : ''; })()}
         ${CAR.isCareer(league()) && state.ledgerIn ? Object.entries(LEDGER).map(([k, d]) => `<p class="note small">${d.icon} ${d.label}: ${ledgerIn(k).toLocaleString()} when loaded ${ledgerNet(k) >= 0 ? '+' : '−'} ${Math.abs(ledgerNet(k)).toLocaleString()} in the app = <b>${Math.max(0, ledgerIn(k) + ledgerNet(k)).toLocaleString()}</b> written to the file. <button class="btn tiny" data-act="nav" data-to="ledger" data-arg="${k}">Ledger</button></p>`).join('') : ''}
         ${dbxOn() ? dbxShareBox() : ''}
@@ -19786,7 +19824,7 @@ screens.export = () => {
           <li>Copy the file's Dropbox link.</li>
           <li>In Hoop Land, import a season and paste the link.</li>
         </ol>`}
-        ${inArtifact() ? `<p class="note gold small">Saves as <b>${esc(artifactName(state.fileName))}</b>: rename it to <b>${esc(state.fileName)}</b> (remove ".json") so Hoop Land can load it.</p>` : ''}
+        ${inArtifact() ? `<p class="note gold small">Saves as <b>${esc(artifactName(seasonFileName()))}</b>: rename it to <b>${esc(seasonFileName())}</b> (remove ".json") so Hoop Land can load it.</p>` : ''}
         <p class="note muted small">Keep a backup of your original file.</p>
       </fieldset>
       ${isCollege() || EDITOR_OFF() ? '' : `<fieldset class="frame"><legend>League File (experimental)</legend>
@@ -19871,7 +19909,7 @@ async function dbxSend(blob, name, what) {
 // and copies its share link, ready to paste into Hoop Land's season import. Behind a switch while it's tested on the
 // live site: hooplandplus.com/?dropbox=on turns it on for that browser (?dropbox=off turns it off); local builds always.
 const DBX_FLAG = 'hlc:dbxbeta';
-const dbxOn = () => !!BUILT_IN_APP_KEY && !inArtifact() && ((() => { try { return localStorage.getItem(DBX_FLAG) === '1'; } catch { return false; } })() || !counting());
+function dbxOn() { return !!BUILT_IN_APP_KEY && !inArtifact() && ((() => { try { return localStorage.getItem('hlc:dbxbeta') === '1'; } catch { return false; } })() || !counting()); }
 (() => {
   const q = new URLSearchParams(location.search);
   const sw = q.get('dropbox');
@@ -19980,7 +20018,7 @@ function buildLeagueExport() {
   const text = serializeSave(L);
   L.season.startingYear = yWas;
   for (const [p, t] of keep) p.traits = t;
-  return new File([text], state.fileName, { type: 'application/octet-stream' });
+  return new File([text], gameFileName(state.fileName), { type: 'application/octet-stream' });
 }
 const edStep = (label, val, act, data, note = '') => `<div class="pts-row"><span class="grow">${label}${note ? ` <span class="small muted">${note}</span>` : ''}</span><button class="btn square" data-act="${act}" ${data} data-d="-1">−</button><span class="pts-val">${val}</span><button class="btn square" data-act="${act}" ${data} data-d="1">+</button></div>`;
 const edSeg = (opts, cur, act, data) => `<div class="tabs fa-tabs">${opts.map(([v, l]) => `<button class="btn small ${cur === v ? 'on focus' : 'off'}" data-act="${act}" ${data} data-v="${v}">${l}</button>`).join('')}</div>`;
