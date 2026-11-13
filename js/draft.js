@@ -7,9 +7,9 @@ import { mulberry32 } from './progression.js';
 // The 12 skill ratings (physical ratings aren't kept for retirees).
 export const SKILL_ATTRS = ATTRS.filter(k => !PHYSICAL.includes(k));
 
-// Drafted rookies lose 4 from each skill rating, but never drop below 2
-// (a rating already at 2 or lower stays where it is).
-export const DRAFT_DROP = 4;
+// No draft drop: every draft runs in the app, which keeps a rookie's ratings as they were (the game takes 4 off every
+// rating when it holds the draft itself). A prospect's current ratings are his incoming level instead: see fitIncoming.
+export const DRAFT_DROP = 0;
 export const DRAFT_FLOOR = 2;
 export const draftDrop = v => (v <= DRAFT_FLOOR ? v : Math.max(DRAFT_FLOOR, v - DRAFT_DROP));
 
@@ -40,8 +40,41 @@ export function transferOf(k, p = null) {
   return (((p?.id ?? 0) + k.charCodeAt(0)) % 2) ? Math.ceil(t) : Math.floor(t);
 }
 // Where a pre-draft rating ends up after the drop and summer league.
-export const projectedRookie = (v, age, bands = DEFAULT_RECOVERY, p = null, k = null) =>
-  Math.min(v, Math.max(Math.min(v, DRAFT_FLOOR), draftDrop(v) + recoveryFor(age, bands, p) + (k ? transferOf(k, p) : 0)));
+// No drop, so he comes in as he stands (the class was set to its incoming level when it arrived).
+export const projectedRookie = v => v;
+
+// The incoming level: set once, when a class comes in, so what you see before the draft is what he plays at. He sits
+// under his ceiling level (5 stars 100, 4.5 93, 4 86, 3.5 79, 3 72) by how ready he is: the readiest (older, productive,
+// a pro body) close to it, a project well under; the gap shrinks with the ceiling, so an older, limited player is
+// nearly what he'll be. Never above Lv 86 (the generational rookie All-Star) or past his own ceilings.
+export const ceilingLevel = pot => 100 - 7 * (10 - Math.min(10, pot || 6));
+export function incomingLevel(p, ready = 0) {
+  const r = Math.max(-1, Math.min(1, ready ?? 0)), C = ceilingLevel(p.pot);
+  return Math.min(86, Math.round(C - (11 - 5 * r) * Math.max(0.3, (C - 50) / 36)));   // a 4-star: ready 80, average 75, project 70
+}
+export function fitIncoming(p, ready = 0) {
+  if (!p?.attributes || !SKILL_ATTRS.every(k => Array.isArray(p.attributes[k]))) return 0;
+  const total = () => SKILL_ATTRS.reduce((a, k) => a + p.attributes[k][0], 0), before = total();
+  // Level = 100 - (168 - total) / 2, so the level wants a skill total of 2 × level - 32.
+  let over = before - (2 * incomingLevel(p, ready) - 32);
+  // The slowest skills to carry over (blocks, rebounds, inside scoring) give first; dunking, steals, shooting last.
+  const w = k => 1 - 0.3 * (TRANSFER[k] || 0);
+  while (over > 0) {
+    let best = null, bv = 0;
+    for (const k of SKILL_ATTRS) { const v = p.attributes[k][0], s = (v - DRAFT_FLOOR) * w(k); if (v > DRAFT_FLOOR && s > bv) { bv = s; best = k; } }
+    if (!best) break;
+    p.attributes[best][0]--; over--;
+  }
+  // Under it (the game's own classes start low, built for its drop): up toward it, never past his own ceilings, the
+  // most room first and the quickest skills to carry over (dunking, steals, shooting) ahead of the slow ones.
+  while (over < 0) {
+    let best = null, bv = 0;
+    for (const k of SKILL_ATTRS) { const a = p.attributes[k], room = Math.min(a[1], capFor(k)) - a[0], s = room / w(k); if (room > 0 && s > bv) { bv = s; best = k; } }
+    if (!best) break;
+    p.attributes[best][0]++; over++;
+  }
+  return Math.abs(before - total());
+}
 
 // No rookie comes in above Lv 86 (a 140 skill total), the truly generational rookie All-Star: there's always room to
 // grow. Over it, the slowest-to-transfer skills give first, a point at a time.
@@ -66,7 +99,7 @@ export function rookieLine(p, bands = DEFAULT_RECOVERY) {
 }
 
 // Prospect floor: the rookie line plus natural development (+2 a rating),
-// never past their ceiling, 20, or 16 for free throws.
+// never past their ceiling, 20, or 15 for free throws.
 export const FLOOR_DEVELOPMENT = 2;
 export function floorVector(p, bands = DEFAULT_RECOVERY) {
   return withDevelopment(p, rookieLine(p, bands));
@@ -75,7 +108,7 @@ function withDevelopment(p, line) {
   return line.map((v, i) => {
     const k = SKILL_ATTRS[i];
     const top = Math.max(p.attributes[k][0], p.attributes[k][1]);
-    return Math.max(v, Math.min(v + FLOOR_DEVELOPMENT, top, k === 'FTS' ? 16 : 20));
+    return Math.max(v, Math.min(v + FLOOR_DEVELOPMENT, top, capFor(k)));
   });
 }
 
@@ -102,8 +135,8 @@ export function applySummerLeague(p, original, bands = DEFAULT_RECOVERY) {
   });
   return gains;
 }
-// Free throws are capped at 16 in this league; everything else at 20.
-export const capFor = k => (k === 'FTS' ? 16 : 20);
+// Free throws are capped at 15 in this league; everything else at 20.
+export const capFor = k => (k === 'FTS' ? 15 : 20);
 
 export function ceilingVector(p) {
   return SKILL_ATTRS.map(k => Math.min(capFor(k), Math.max(p.attributes[k][0], p.attributes[k][1])));
@@ -171,17 +204,26 @@ export function scoutedPot(p, salt = 0, chance = 25) {
 // including older ones).
 export const MIN_COMP_SEASONS = 2;
 
+// When a player's career was centered: the middle of his seasons (his draft year plus five without them).
+export const MODERN_ERA = 1980;
+export function eraOf(p) {
+  const yrs = (p.stats || []).flatMap(s => (s.league === 0 && s.yr > 1900 && (s.season || []).some(r => r.GP > 0) ? [s.yr] : []));
+  if (yrs.length) return (Math.min(...yrs) + Math.max(...yrs)) / 2;
+  const d = p.history?.draft?.yr;
+  return d > 1900 ? d + 5 : 9999;   // nothing to go on: keep him
+}
 export function buildCompPool(league) {
   const pool = [];
   const yr = league.season.currentYear;
   const isRookie = p => p.history?.draft?.yr === yr || p.history?.yearDeclared === yr;
   const add = (p, group, vec) => {
     if (!p?.attributes || !p.ht || isRookie(p)) return;
+    if (eraOf(p) < MODERN_ERA) return;   // a scouting report today doesn't reach back to the 60s and 70s
     const v = vec(p);
     if (v.reduce((a, b) => a + b, 0) < 40) return; // empty/placeholder records
     // Established = has played enough to show who they are.
     const established = (group !== 'Active' && group !== 'Free Agent') || (p.yrs || 0) >= MIN_COMP_SEASONS;
-    pool.push({ p, group, v, ht: p.ht, wt: p.wt || 0, pos: p.pos, established });
+    pool.push({ p, group, v, ht: p.ht, wt: p.wt || 0, pos: p.pos, established, tend: p.tendencies || null });
   };
   for (const t of league.teams) for (const p of t.roster) add(p, 'Active', x => SKILL_ATTRS.map(k => x.attributes[k][0]));
   for (const p of league.freeAgents || []) add(p, 'Free Agent', x => SKILL_ATTRS.map(k => x.attributes[k][0]));
@@ -208,6 +250,43 @@ export function compDistance(v, body, entry) {
 
 const bodyOf = p => ({ ht: p.ht, wt: p.wt, pos: p.pos });
 
+// Ceiling comps: who he plays like at his best. Height, weight and position, then playstyle: the shape of his ratings
+// (each as a share of his total, so the same kind of player reads alike at any level) and his tendencies when both
+// have them. His ceiling is the potential: the same tier is the comp itself, a tier under is "Comp+" (him, but more), a
+// tier over "Comp lite".
+const shapeOf = v => { const s = v.reduce((a, b) => a + b, 0) || 1; return v.map(x => (x * 140) / s); };
+const STYLE_POS_WEIGHT = 4, TEND_WEIGHT = 3, POT_STEP = 2;
+export function styleDistance(v, body, entry, tend = null) {
+  const a = shapeOf(v), b = (entry.shape ||= shapeOf(entry.v));
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d += (a[i] - b[i]) ** 2;
+  d += (HEIGHT_WEIGHT * (body.ht - entry.ht)) ** 2;
+  if (body.wt && entry.wt) d += (WEIGHT_WEIGHT * (body.wt - entry.wt)) ** 2;
+  if (body.pos != null && entry.pos != null) d += (STYLE_POS_WEIGHT * (body.pos - entry.pos)) ** 2;
+  if (tend && entry.tend) {
+    let s = 0, n = 0;
+    for (const k of Object.keys(tend)) if (typeof tend[k] === 'number' && typeof entry.tend[k] === 'number') { s += (tend[k] - entry.tend[k]) ** 2; n++; }
+    if (n) d += TEND_WEIGHT * s / n;
+  }
+  return Math.sqrt(d);
+}
+// Who a player plays like now: the closest established players by size, position and playstyle within a potential step.
+export function playsLike(p, pool, vec, n = 2) {
+  return pool.filter(e => e.p.id !== p.id && e.established && Math.abs((e.p.pot || 0) - (p.pot || 0)) <= 1)
+    .map(e => ({ e, d: styleDistance(vec, bodyOf(p), e, p.tendencies) + POT_STEP * Math.abs((e.p.pot || 0) - (p.pot || 0)) }))
+    .sort((a, b) => a.d - b.d).slice(0, n)
+    .map(({ e, d }) => ({ id: e.p.id, name: playerName(e.p), group: e.group, tier: tierFor(e.p.pot), sim: Math.max(0, Math.round(100 - d * 3)) }));
+}
+export const potQualifier = (pot, compPot) => (compPot < pot ? '+' : compPot > pot ? ' lite' : '');
+// The closest established players within a potential step of his ceiling (the same tier preferred).
+function ceilingComps(p, v, pool, pot, n = 3) {
+  return pool
+    .filter(e => e.p.id !== p.id && e.established && Math.abs((e.p.pot || 0) - pot) <= 1)
+    .map(e => ({ e, dist: styleDistance(v, bodyOf(p), e, p.tendencies) + POT_STEP * Math.abs((e.p.pot || 0) - pot) }))
+    .sort((a, b) => a.dist - b.dist).slice(0, n)
+    .map(({ e, dist }) => ({ name: playerName(e.p) + potQualifier(pot, e.p.pot), group: e.group, ht: e.ht, wt: e.wt, pos: e.p.pos, tier: tierFor(e.p.pot), sim: Math.max(0, Math.round(100 - dist * 3)), id: e.p.id }));
+}
+
 // Closest pool players to a vector. Similarity is 0-100.
 export function findComps(v, body, pool, n = 3, excludeId = null, establishedOnly = false) {
   return pool
@@ -221,7 +300,7 @@ export function findComps(v, body, pool, n = 3, excludeId = null, establishedOnl
 export function prospectComps(p, pool, bands = DEFAULT_RECOVERY, pot = p.pot) {
   return {
     floor: findComps(floorVector(p, bands), bodyOf(p), pool, 3, p.id),
-    ceiling: findComps(projectedCeiling(p, pot), bodyOf(p), pool, 3, p.id, true),
+    ceiling: ceilingComps(p, projectedCeiling(p, pot), pool, pot),
   };
 }
 
@@ -232,10 +311,6 @@ export function prospectComps(p, pool, bands = DEFAULT_RECOVERY, pot = p.pot) {
 // and Legend) only go to top-tier players, at most `legendCap` per class.
 // Floor comps never come from that top group and never above tier.
 // Returns Map id -> { floor: [comp], ceiling: [comp] }.
-// Share of each class's comps tagged "+" (prospect projects a bit better) or
-// "lite" (a bit short), picked by the biggest gaps; never on tiny gaps.
-const QUALIFIER_MAX = 2;      // at most this many "+" and "lite" per class
-const QUALIFIER_MIN_GAP = 4; // skill-total points
 const HISTORIC_PENALTY = 6;  // distance added to retirees / Hall of Famers so current players win close calls
 const SIZE_RANGE = 2;        // inches: comps stay this close in height when anyone fits
 
@@ -268,16 +343,33 @@ export function assignClassComps(players, pool, { floorVec, ceilVec, potOf = p =
     if (e) used.add(e.p.id);
     return e;
   };
+  // Ceilings: playstyle and size within a potential step of his (the same tier preferred), "+" a step under, "lite" a
+  // step over. The greats (potential 10+) only for the top prospects, a few a class.
+  const pickStyle = (p, vec, ok, pot) => {
+    const best = within => {
+      let b = null, bestD = Infinity;
+      for (const e of pool) {
+        if (used.has(e.p.id) || e.p.id === p.id || !ok(e)) continue;
+        if (within && Math.abs(e.ht - p.ht) > SIZE_RANGE) continue;
+        const d = styleDistance(vec, bodyOf(p), e, p.tendencies) + POT_STEP * Math.abs((e.p.pot || 0) - pot);
+        if (d < bestD) { bestD = d; b = e; }
+      }
+      return b;
+    };
+    const e = best(true) || best(false);
+    if (e) used.add(e.p.id);
+    return e;
+  };
   for (const p of players) {
     const pot = potOf(p);
-    // Within one tier of the scouted tier (falling back to anything lower).
-    const okCeil = c => c.established && c.p.pot <= pot &&
-      (c.p.pot < TOP_COMP || (pot >= TOP_COMP && legends < legendCap));
-    const top = pot >= TOP_COMP;
-    const e = pick(p, ceilVec(p), c => okCeil(c) && c.p.pot >= pot - 1, top) || pick(p, ceilVec(p), okCeil, top);
+    const legendOk = c => c.p.pot < TOP_COMP || (pot >= TOP_COMP - 1 && legends < legendCap);
+    const e = pickStyle(p, ceilVec(p), c => c.established && Math.abs(c.p.pot - pot) <= 1 && legendOk(c), pot)
+      || pickStyle(p, ceilVec(p), c => c.established && c.p.pot <= pot && legendOk(c), pot);
     if (e) {
       if (e.p.pot >= TOP_COMP) legends++;
-      out.get(p.id).ceiling = [fmt(e, ceilVec(p))];
+      const c = fmt(e, ceilVec(p));
+      c.name += potQualifier(pot, e.p.pot);
+      out.get(p.id).ceiling = [c];
     }
   }
   for (const p of players) {
@@ -289,19 +381,6 @@ export function assignClassComps(players, pool, { floorVec, ceilVec, potOf = p =
     const e = pick(p, floorVec(p), c => c.p.pot < TOP_COMP && c.p.pot <= cap && c.established);
     if (e) out.get(p.id).floor = [fmt(e, floorVec(p))];
   }
-  // A couple of "+" / "lite" per class, on the comps furthest from their
-  // list's typical gap (floors usually sit under their comp, ceilings over).
-  const all = [];
-  for (const kind of ['floor', 'ceiling']) {
-    const comps = [...out.values()].map(c => c[kind][0]).filter(Boolean);
-    if (!comps.length) continue;
-    const sorted = comps.map(c => c.gap).sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
-    comps.forEach(c => all.push({ c, rel: c.gap - median }));
-  }
-  all.sort((a, b) => b.rel - a.rel);
-  all.filter(x => x.rel >= QUALIFIER_MIN_GAP).slice(0, QUALIFIER_MAX).forEach(x => { x.c.name += '+'; });
-  all.reverse().filter(x => x.rel <= -QUALIFIER_MIN_GAP).slice(0, QUALIFIER_MAX).forEach(x => { x.c.name += ' lite'; });
   return out;
 }
 
@@ -731,7 +810,7 @@ export function rookieFloorVector(p, original = null, bands = DEFAULT_RECOVERY) 
 export function rookieComps(p, pool, original = null, bands = DEFAULT_RECOVERY, pot = p.pot) {
   return {
     floor: findComps(rookieFloorVector(p, original, bands), bodyOf(p), pool, 3, p.id),
-    ceiling: findComps(projectedCeiling(p, pot), bodyOf(p), pool, 3, p.id, true),
+    ceiling: ceilingComps(p, projectedCeiling(p, pot), pool, pot),
   };
 }
 
@@ -781,7 +860,7 @@ export function collegeLine(p, leagues) {
       const pg = k => r[k] / r.GP;
       const pct = (m, a) => (r[a] ? r[m] / r[a] * 100 : null);
       best = {
-        yr: s.yr, li: s.league, team: team ? `${team.city} ${team.name}` : L.shortName, gp: r.GP, mpg: r.MIN / 60 / r.GP,
+        yr: s.yr, li: s.league, tid: r.tid, team: team ? `${team.city} ${team.name}` : L.shortName, gp: r.GP, mpg: r.MIN / 60 / r.GP,
         pts: pg('PTS'), reb: pg('REB'), ast: pg('AST'), stl: pg('STL'), blk: pg('BLK'), tov: pg('TO'),
         fg: pct('FGM', 'FGA'), tp: pct('TPM', 'TPA'), ft: pct('FTM', 'FTA'), tpa: pg('TPA'),
       };
@@ -1018,5 +1097,8 @@ export function draftScore(p, scales, { ceilOf, floorOf, potOf = null }, team = 
     const vec = ceil.map((c, i) => (c + floor[i]) / 2);
     need = needsFilled(p, team.needs, team.baseline, vec).length * 0.35;
   }
+  // Already loaded at his spot (two or three core players there, 84+ and 30 or younger): not off the board, but a
+  // team looks harder at a position it needs.
+  if (team?.crowd) { const c = team.crowd[groupOf(p.pos)] || 0; need -= c >= 3 ? 1.2 : c === 2 ? 0.45 : 0; }
   return wc * zc + wf * zf + both + age + need + tier;
 }

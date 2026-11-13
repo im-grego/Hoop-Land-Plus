@@ -8,6 +8,7 @@ import { teamRecord, teamStatus, lotterySetup, lotteryOdds, seedOrder, standings
 import { seasonLine } from './storylines.js';
 import { tr, traitsSet } from './traits.js';
 import * as FA from './freeagency.js';
+import { fairSalary } from './trades.js';
 
 const GROUPS = { guards: 'Guards', wings: 'Wings', bigs: 'Bigs' };
 export const groupOf = p => (p.pos <= 2 ? 'guards' : p.pos <= 5 ? 'wings' : 'bigs');
@@ -304,6 +305,17 @@ export function draftPosition(L, team, format = 'auto') {
 export function rumorMill(L, { level = levelOf, li = 0, skip = () => false } = {}) {
   const yr = lastYr(L);
   const out = [];
+  // Full seasons a player has spent with a team, back to back up to now, from his real season stats (a player in his
+  // first season there has 0: nobody talks about trading him or breaking up his pairing yet).
+  const cur = L.season.currentYear, seasonDone = L.season.phase > 9;
+  const fullYrs = (p, team) => {
+    let n = 0;
+    for (let y = seasonDone ? cur : cur - 1; (p.stats || []).some(x => x.league === li && x.yr === y && (x.season || []).some(r => r.tid === team.id)); y--) n++;
+    return n;
+  };
+  // A rookie (no earlier season in this league) is never the one a team is said to build around.
+  const rookie = p => !(p.stats || []).some(x => x.league === li && x.yr < cur && (x.season || []).some(r => r.GP > 0));
+  const asb = L.season.allStarWeekend ? L.season.currentDay >= L.season.allStarWeekend : false;
   for (const team of L.teams) {
     if (skip(team)) continue;
     const st = teamStanding(L, team);
@@ -337,28 +349,158 @@ export function rumorMill(L, { level = levelOf, li = 0, skip = () => false } = {
       if (morale >= 85) heat -= 1;
       if (heat >= 3) out.push({ kind: 'star', p: star, team, heat: Math.min(3, Math.floor(heat / 1.5)), why, level: level(star), mpg, morale });
     }
-    // The tax: an expensive team that isn't winning might blow it up; a
-    // contender over the line has to decide whether to pay.
+    // The money: a team near the top of what its owner will spend has to shed a contract. How high that is depends on
+    // where the team stands: a rebuilding or selling team shouldn't be anywhere near the tax, a team in the middle
+    // near the top of the 1st apron, and a contender (whose owner pays to keep a winner together, up to the 2nd apron)
+    // only near the 2nd apron. A 90+ player is the one they build around, never the one they sell (he only turns up
+    // as a disgruntled star): the biggest contract after him is the one that could move.
+    if (FA.capSystemOn()) {
+      const C = FA.capLines(L), pay = FA.teamCommitted(team), near = 5;
+      const tier = st.tier, contender = tier === 'favorites' || tier === 'contending', seller = tier === 'rebuilding' || tier === 'selling';
+      const line = contender ? (FA.runningItBack(L, team) ? C.apron2 : C.apron2 - near) : seller ? C.tax : C.apron1;
+      if (pay >= line - near) {
+        const m = (v, s, at) => (v > 0 ? `$${v}M ${s}` : `right at ${at}`);
+        const where = pay >= C.apron2 ? m(pay - C.apron2, 'over the 2nd apron', 'the 2nd apron') : pay >= C.apron2 - near ? m(C.apron2 - pay, 'from the 2nd apron', 'the 2nd apron')
+          : pay >= C.apron1 ? m(pay - C.apron1, 'into the 1st apron', 'the 1st apron') : pay >= C.tax ? m(pay - C.tax, 'over the tax', 'the tax') : m(C.tax - pay, 'from the tax', 'the tax');
+        const bill = pay > C.tax ? FA.taxBill(L, team) : 0;
+        const why = [where, ...(bill ? [`a $${bill}M tax bill`] : []), ...(seller ? [`a ${tier} team`] : [])];
+        // The one they build around: a good player (80+) under 33 who hasn't reached his decline age, the highest potential
+        // first; on a tie a player 27 or younger, then the better one (Maxey over Brown and Edgecombe, Amen over Durant).
+        // Two tied that way (same potential, both 27 or younger or both older) are a duo they build around together.
+        const cands = roster.filter(p => !rookie(p) && level(p) >= 80 && p.age <= 32 && p.age < (p.regressionAge || 31))
+          .sort((a, b) => (b.pot || 0) - (a.pot || 0) || (b.age <= 27) - (a.age <= 27) || level(b) - level(a));
+        const core = cands[0] || null, duo = cands[1] && cands[1].pot === core.pot && (cands[1].age <= 27) === (core.age <= 27) ? cands[1] : null;
+        const keep = core ? [core, ...(duo ? [duo] : [])] : null;
+        // The ones shopped: real contracts (15M+) on players who've had a full season there, never a young cornerstone,
+        // and for a contender never its two best players (it ducks the apron by moving the role contracts around them).
+        // The most overpaid first (salary over what his level is worth), then the biggest; a second one that's also
+        // overpaid can go with him.
+        const over = x => (x.contract?.sal || 0) - fairSalary(level(x) - Math.max(0, x.age - 32) * 2);   // an older player's deal is judged on where he's headed
+        const shop = [...roster].filter(p => !keep?.includes(p) && !(contender && roster.indexOf(p) < 2) && fullYrs(p, team) >= 1 && level(p) >= 70 && level(p) < 90
+          && (p.contract?.sal || 0) >= 15 && !(p.age <= 24 && (p.pot || 0) >= 9))
+          .sort((x, y) => over(y) - over(x) || (y.contract?.sal || 0) - (x.contract?.sal || 0));
+        const big = shop[0], also = shop[1] && over(shop[1]) > 0 && roster.indexOf(shop[1]) >= 2 ? shop[1] : null;
+        if (big) out.push({ kind: 'blowup', p: big, team, heat: seller || pay >= C.apron2 ? 2 : 1, why, level: level(big), morale: big.season?.morale ?? 70, bill, keep, seller, also, apron: pay >= C.apron1 - near });
+      }
+    }
+    // Same duo, same result: two of its best three (the same potential, 8 or better, and 3 levels or less apart) have gone out in the playoffs together three years running
+    // without a title. Before their value slips, the team would move one to build around the other (the higher
+    // potential, then the younger, is the one it keeps).
+    {
+      const top = roster.slice(0, 3).filter(p => level(p) >= 82);
+      const runs = (team.season || []).filter(s => (s.round || 0) > 0 && (s.yr < L.season.currentYear || L.season.phase > 9)).sort((x, y) => y.yr - x.yr);
+      const together = (p, yr) => (p.stats || []).some(x => x.league === li && x.yr === yr && (x.playoffs || []).some(r => r.tid === team.id));
+      const streak = (a, b) => {
+        let n = 0;
+        for (const s of runs) {
+          if (s.yr !== runs[0].yr - n) break;
+          const champ = (s.round === 4 && s.seriesWins === 4) || team.championships?.yearsWon?.includes(s.yr);
+          if (champ || !together(a, s.yr) || !together(b, s.yr)) break;
+          n++;
+        }
+        return n;
+      };
+      const pairs = top.flatMap((a, i) => top.slice(i + 1).map(b => [a, b])).filter(([a, b]) => a.pot === b.pot && a.pot >= 8 && Math.abs(level(a) - level(b)) <= 3 && Math.min(level(a), level(b)) >= 86 && [a, b].every(x => x.age < (x.regressionAge || 31)));   // a real duo: same potential (8+), 3 levels or less apart
+      // How the pairing is going. Three straight playoff exits together: split them. Otherwise, only once they've had
+      // a full season together: after one, is the experiment already over; after two or more, is it time to blow it up
+      // (when the team is under .500 this season, or went out in the first round or missed the playoffs last season).
+      // A brand-new pairing is never broken up, but past the All-Star break a losing team's new duo can look shaky.
+      const rec = teamRecord(team), now = rec.yr === cur && rec.W + rec.L >= 10 ? rec : null;
+      const last = (team.season || []).find(s => s.yr === (seasonDone ? cur : cur - 1));
+      const losing = now ? now.pct < 0.5 : false, struggling = losing || (last ? (last.round || 0) < 3 : false);   // short of the conference finals
+      const recTxt = now ? `${now.W}-${now.L}` : '';
+      const pick = (a, b) => [a, b].sort((x, y) => (y.pot || 0) - (x.pot || 0) || x.age - y.age || level(y) - level(x));
+      let hit = runs[0] && runs[0].yr >= cur - 1 && pairs.map(([a, b]) => ({ a, b, n: streak(a, b) })).find(x => x.n >= 3);
+      if (hit) {
+        const [keep, move] = pick(hit.a, hit.b);
+        out.push({ kind: 'split', mode: 'exits', p: move, team, heat: 2, why: [], level: level(move), morale: move.season?.morale ?? 70, keep: [keep], pair: [hit.a, hit.b], years: hit.n });
+      } else if (struggling) {
+        // The pairing (both 86+ and not yet at their decline age): a duo as above, or else its two best players when both are 86+ (a star brought in next to the
+        // one already there, like Towns next to Edwards). The noise grows the longer it fails: one full season, is the
+        // experiment over; two or more, it gets loud. It's louder when the pair is expensive (both on $30M+), when two
+        // alphas share the ball, and when the team is losing now as well; two young players still on cheap deals
+        // (25 or younger, under $20M) get patience until they've had three seasons together.
+        const pool = pairs.length ? pairs : (roster[1] && level(roster[0]) >= 86 && level(roster[1]) >= 86 && [roster[0], roster[1]].every(x => x.age < (x.regressionAge || 31)) ? [[roster[0], roster[1]]] : []);
+        const sal = x => x.contract?.sal || 0;
+        // After one season it takes a losing record or a first-round exit (or no playoffs); after two, anything short of
+        // the conference finals.
+        hit = pool.map(([a, b]) => ({ a, b, n: Math.min(fullYrs(a, team), fullYrs(b, team)) })).find(x => x.n >= 2 || (x.n >= 1 && (losing || (last ? (last.round || 0) < 2 : false))));
+        const young = hit && [hit.a, hit.b].every(x => x.age <= 25 && sal(x) < 20);
+        if (hit && !(young && hit.n < 3)) {
+          const [keep, move] = pick(hit.a, hit.b);
+          const pressure = hit.n + (losing ? 1 : 0) + (last && (last.round || 0) < 1 ? 1 : 0)
+            + (sal(hit.a) >= 30 && sal(hit.b) >= 30 ? 1 : 0) + (tr(hit.a, 'playoffRiser') >= 16 && tr(hit.b, 'playoffRiser') >= 16 ? 1 : 0);
+          const heat = hit.n >= 2 ? (pressure >= 4 ? 3 : 2) : 1;
+          out.push({ kind: 'split', mode: hit.n >= 2 ? (losing || (last ? (last.round || 0) < 1 : false) ? 'blowup' : 'retool') : 'experiment', p: move, team, heat: hit.n >= 2 && !losing && !(last && (last.round || 0) < 1) ? 1 : heat, why: [], level: level(move), morale: move.season?.morale ?? 70,
+            keep: [keep], pair: [hit.a, hit.b], years: hit.n, rec: recTxt, alphas: tr(hit.a, 'playoffRiser') >= 16 && tr(hit.b, 'playoffRiser') >= 16, pricey: sal(hit.a) >= 30 && sal(hit.b) >= 30 });
+        }
+      }
+      if (!hit && asb && losing) {
+        const pr = top.flatMap((a, i) => top.slice(i + 1).map(b => [a, b])).find(([a, b]) => fullYrs(a, team) === 0 || fullYrs(b, team) === 0);
+        if (pr) {
+          const nu = fullYrs(pr[0], team) === 0 ? pr[0] : pr[1];
+          out.push({ kind: 'shaky', p: nu, team, heat: 1, why: [], level: level(nu), morale: nu.season?.morale ?? 70, pair: pr, rec: recTxt });
+        }
+      }
+    }
+    // Paydays coming: near the tax, a young player (25 or younger, 82+) whose cheap deal runs out in the next two
+    // offseasons is about to cost a lot more. With the money already tied up in a few players, a team looks at moving
+    // one of the big contracts now (one step back to take two forward) rather than lose him or blow past the aprons.
     if (FA.capSystemOn()) {
       const C = FA.capLines(L), pay = FA.teamCommitted(team);
-      if (pay > C.tax) {
-        const bill = FA.taxBill(L, team);
-        const big = [...roster].filter(p => level(p) >= 76).sort((a, b) => (b.contract?.sal || 0) - (a.contract?.sal || 0))[0];
-        if (big && FA.taxStance(L, team) !== 'pay') out.push({ kind: 'blowup', p: big, team, heat: 2, why: [`$${pay - C.tax}M over the tax`, `a $${bill}M tax bill`], level: level(big), morale: big.season?.morale ?? 70, bill });
-        else if (big) out.push({ kind: 'taxpay', p: star, team, heat: 1, why: [`$${pay - C.tax}M over the tax`], level: level(star), morale: star.season?.morale ?? 70, bill });
+      const rising = roster.filter(p => p.age <= 25 && level(p) >= 82 && (p.contract?.yrs || 9) <= 2 && (p.contract?.sal || 0) < 20)
+        .map(p => ({ p, raise: Math.max(0, fairSalary(level(p) + 2) - (p.contract?.sal || 0)) })).sort((a, b) => b.raise - a.raise)[0];
+      if (rising && pay >= C.tax - 5 && pay + rising.raise > C.apron1) {
+        const big = roster.filter(p => p !== rising.p && (p.contract?.sal || 0) >= 25 && fullYrs(p, team) >= 1 && level(p) < 95)
+          .sort((a, b) => ((b.contract?.sal || 0) - fairSalary(level(b))) - ((a.contract?.sal || 0) - fairSalary(level(a))) || a.age - b.age)[0];
+        const tied = roster.filter(p => (p.contract?.sal || 0) >= 25);
+        if (big) out.push({ kind: 'payday', p: big, team, heat: 2, why: [], level: level(big), morale: big.season?.morale ?? 70, rising: rising.p,
+          when: cur + (rising.p.contract?.yrs || 1), tied: tied.reduce((a, x) => a + (x.contract?.sal || 0), 0), tiedN: tied.length });
+      }
+      // A contender near the aprons with a young, cheaper player at the same spot who's close to the starter's level:
+      // moving the expensive one (a slight downgrade) brings back depth or room for exception signings.
+      if ((st.tier === 'favorites' || st.tier === 'contending') && pay >= C.apron1 - 5) {
+        const pairs = roster.filter(p => (p.contract?.sal || 0) >= 25 && p.age >= 26 && fullYrs(p, team) >= 1 && level(p) < 95 && roster.indexOf(p) > 0)
+          .map(p => ({ p, y: roster.find(y => y !== p && groupOf(y) === groupOf(p) && y.age <= 24 && level(y) >= level(p) - 6 && (y.contract?.sal || 0) <= (p.contract?.sal || 0) / 2) }))
+          .filter(x => x.y);
+        const pk = pairs.sort((a, b) => (b.p.contract?.sal || 0) - (a.p.contract?.sal || 0))[0];
+        if (pk) out.push({ kind: 'replace', p: pk.p, team, heat: 1, why: [], level: level(pk.p), morale: pk.p.season?.morale ?? 70, heir: pk.y });
+      }
+    }
+    // A bad contract on a team that isn't contending, wherever the payroll is: a player who's had a full season there,
+    // paid well over what his level is worth (10M+) with another year to run. The young core it builds around is named.
+    if (st.tier !== 'favorites' && st.tier !== 'contending' && !out.some(x => x.team === team && x.kind === 'blowup')) {
+      const over = x => (x.contract?.sal || 0) - fairSalary(level(x) - Math.max(0, x.age - 32) * 2);   // an older player's deal is judged on where he's headed
+      const bad = roster.filter(p => fullYrs(p, team) >= 1 && (p.contract?.yrs || 0) >= 2 && over(p) >= 10 && level(p) < 90).sort((a, b) => over(b) - over(a))[0];
+      if (bad) {
+        const young = roster.filter(p => p !== bad && !rookie(p) && p.age <= 25 && level(p) >= 76).sort((a, b) => (b.pot || 0) - (a.pot || 0) || level(b) - level(a))[0];
+        out.push({ kind: 'contract', p: bad, team, heat: 1, why: [`$${bad.contract.sal}M a year through ${cur + bad.contract.yrs - 1}`], level: level(bad), morale: bad.season?.morale ?? 70, keep: young ? [young] : null });
+      }
+    }
+    // Sell high: a team that isn't contending, a good player (78-89) a year or two from the age his game starts to
+    // slip. His value won't be higher than it is now (more so when he's playing better than last season).
+    if (st.tier !== 'favorites' && st.tier !== 'contending') {
+      const sh = roster.filter(p => level(p) >= 78 && level(p) < 90 && fullYrs(p, team) >= 1 && !out.some(x => x.p === p) && p.age >= (p.regressionAge || 31) - 2 && p.age <= (p.regressionAge || 31))
+        .sort((a, b) => level(b) - level(a))[0];
+      if (sh) {
+        const now = seasonLine(sh, li, L.season.currentYear), before = seasonLine(sh, li, L.season.currentYear - 1);
+        const hot = now && before && now.gp >= 8 && now.ppg >= before.ppg + 2;
+        out.push({ kind: 'sellhigh', p: sh, team, heat: hot ? 2 : 1, why: hot ? [`${now.ppg.toFixed(1)} a night, up from ${before.ppg.toFixed(1)}`] : [], level: level(sh), morale: sh.season?.morale ?? 70, hot });
       }
     }
     // Veterans a rebuilding (or sliding) team might move.
     if (st.status === 'rebuilding') {
       for (const p of roster.slice(0, 6)) {
         if (p === star && out.some(x => x.p === p)) continue;
-        if (level(p) >= 79 && p.age >= (p.regressionAge || 32) - 4) out.push({ kind: 'vet', p, team, heat: level(p) >= 82 ? 2 : 1, why: [`${p.age} years old on a ${st.tier} team`], level: level(p), morale: p.season?.morale ?? 70 });
+        if (level(p) >= 79 && p.age >= (p.regressionAge || 32) - 4 && fullYrs(p, team) >= 1) out.push({ kind: 'vet', p, team, heat: level(p) >= 82 ? 2 : 1, why: [`${p.age} years old on a ${st.tier} team`], level: level(p), morale: p.season?.morale ?? 70 });
       }
       // Veterans it's shopping (the contracts it took on included) are on the market too.
       // Only names that would make headlines.
-      for (const p of roster) if (p.season?.onTradeBlock === 1 && p.age >= 28 && level(p) >= 75 && (p.pot || 0) >= 8 && !out.some(x => x.p === p)) out.push({ kind: 'block', p, team, heat: 1, why: [], level: level(p), morale: p.season?.morale ?? 70 });
+      for (const p of roster) if (p.season?.onTradeBlock === 1 && p.age >= 28 && level(p) >= 75 && (p.pot || 0) >= 8 && (p.contract?.sal || 0) >= 5 && !out.some(x => x.p === p)) out.push({ kind: 'block', p, team, heat: 1, why: [], level: level(p), morale: p.season?.morale ?? 70 });
     }
   }
-  return out.sort((a, b) => b.heat - a.heat || b.level - a.level);
+  // One rumor per team: its hottest.
+  const seen = new Set();
+  return out.sort((a, b) => b.heat - a.heat || b.level - a.level).filter(r => !seen.has(r.team) && seen.add(r.team));
 }
 export const statusOfAll = L => L.teams.map(t => ({ team: t, ...teamStanding(L, t) }));
