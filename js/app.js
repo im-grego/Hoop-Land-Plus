@@ -73,7 +73,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.366.1';
+const APP_VERSION = '0.366.2';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.0';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -103,6 +103,7 @@ const DEVLOG = [
       'Set a rotation of 5 to 12 players on any lineup tab, with suggested minutes for that size',
       'Healthy Lineup: save your full-strength lineup and bring it back in one tap',
       'Lineup changes save as you go',
+      'Promises on the lineup screen: see every starting-role and minutes promise you\'ve made, with a heads-up when a change breaks one',
       'Injuries show in games, with the game number a player is back for',
       'League ticker along the bottom with scores and the stat leaders',
       'Team logos saved in the app',
@@ -114,6 +115,9 @@ const DEVLOG = [
       'Home screen reorganized around your next game',
       'Long names shrink to fit instead of getting cut off',
       'Full screen when installed on Android',
+      'Draft outlook shows next year\'s picks, with the rest of your future picks in a dropdown',
+      'Draft tabs keep your place when you switch between Prospects, My Board and Front Office',
+      'G League send-down list runs from worst to best',
     ]],
     ['CPU Logic', [
       'Rotations built from real NBA minutes',
@@ -127,6 +131,7 @@ const DEVLOG = [
       'CPU teams use the game\'s Optimized lineups so players return from injury on their own',
       'Smarter starting spots: combo guards, wings and forwards placed by passing, height and weight',
       'Developing rotations play young, high-potential players while still trying to win',
+      'Promised starters start, and promised minutes hold in Real NBA lineups too',
     ]],
     ['Bug Fixes', [
       'Season files with stray characters now load',
@@ -145,6 +150,7 @@ const DEVLOG = [
       'Taking minutes from a player comes off his own position',
       'A new save with the same name gets the Realistic NBA setup and realistic draft classes again',
       'The background now reaches the bottom of the screen',
+      'Tiers on My Board show with a filter on',
     ]],
   ] },
 ];
@@ -898,6 +904,7 @@ function render() {
   state.anchor = null;
   fitText(); setTimeout(() => fitText(), 250);
   if (state.toTop) { target = 0; state.toTop = false; }
+  if (state.keepY != null) { target = Math.min(state.keepY, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)); state.keepY = null; }
   // A screen that asks to glide to a section: a quick smooth scroll so it sits just under the header.
   const glide = state.glideTo ? document.querySelector(state.glideTo) : null;
   state.glideTo = null;
@@ -9300,8 +9307,37 @@ function promisedMinutes(t) {
     if (x.tid !== t.id || x.ans !== 'promise') continue;
     if (x.topic === 'role') out[pid] = { min: Math.max(26, Math.round((x.mpg || 0) + 4)) };
     if (x.topic === 'grow') out[pid] = { start: true, min: 24 };
+    if (out[pid]) out[pid].src = 'Exit interview';
+  }
+  // "He'll start" on the record at Media Day.
+  for (const x of loadPromises()) {
+    if (x.src !== 'presser' || x.v !== 'start' || x.tid !== t.id || x.yr !== yr) continue;
+    out[x.pid] = { ...(out[x.pid] || {}), start: true, min: Math.max(out[x.pid]?.min || 0, 24), src: out[x.pid] ? 'Exit interview + Media Day' : 'Media Day' };
   }
   return out;
+}
+// Each promise against the lineup you have now: starting where he was told he would, and the minutes promised.
+function promiseCheck(t, plan) {
+  const pr = promisedMinutes(t), k = gameMinutes() / 48, out = [];
+  for (const [pid, x] of Object.entries(pr)) {
+    const r = plan.rows.find(q => q.p.id === +pid);
+    if (!r) continue;
+    const need = Math.round((x.min || 0) * k), min = r.minutes[0], starts = r.linePos < 5;
+    out.push({ p: r.p, x, need, min, starts, okStart: !x.start || starts, okMin: !need || min >= need });
+  }
+  return out;
+}
+// A pop-up when a change breaks a promise that was being kept a moment ago.
+function promiseWatch(t, plan) {
+  const now = promiseCheck(t, plan), key = `${t.id}`, was = (state.luProm ||= {})[key];
+  state.luProm[key] = Object.fromEntries(now.map(c => [c.p.id, { s: c.okStart, m: c.okMin }]));
+  if (!was) return;
+  for (const c of now) {
+    const w = was[c.p.id];
+    if (!w) continue;
+    if (w.s && !c.okStart) toast(`🤝 Promise broken: ${c.p.ln}`, `You told him he'd start (${c.x.src}).`, 3200, true);
+    else if (w.m && !c.okMin) toast(`🤝 Promise broken: ${c.p.ln}`, `You promised him ${c.need} minutes (${c.x.src}). He's at ${c.min}.`, 3200, true);
+  }
 }
 const ROT_TXT = { bd: ['Average bench', 'Deep bench', 'Short bench'], bu: ['low bench usage', 'medium bench usage', 'high bench usage'] };
 const lineupMode = t => (teamStatus(league(), t) === 'rebuilding' ? 'develop' : 'compete');
@@ -9328,10 +9364,11 @@ function lineupView(L, t) {
 screens.lineup = (args = {}) => {
   const L = league(), t = L.teams.find(x => x.id === +(args.arg ?? args.tid)) || myTeam() || viewTeams()[0] || L.teams[0];
   if (CAR.isCareer(L)) { lineupView(L, t); return; }
-  if (!args.ld) { Object.assign(args, luFromSave(t) || {}); args.ld = 1; }
+  if (!args.ld) { Object.assign(args, luFromSave(t) || {}); args.ld = 1; if (state.luProm) delete state.luProm[t.id]; }   // a fresh visit: no pop-ups for what's already off
   const real = !!realMinutes(t), mode = args.mode && (args.mode !== 'real' || real) ? args.mode : luDefault(t);
   const game = gameMinutes(), cr = coachRot(t, mode === 'playoffs'), size = args.size || cr.size;
   const plan = luPlan(t, { ...args, mode });
+  promiseWatch(t, plan);
   const step = 1;
   const posN = p => POSITIONS[p.pos] || '';
   // A table like a game's rotation screen: spot, name, position, level, minutes (a segmented bar, − and +) and the
@@ -9393,6 +9430,10 @@ screens.lineup = (args = {}) => {
       <div class="tabs fa-tabs">${tabs.map(k => `<button class="btn small ${k === mode ? 'on focus' : 'off'}" data-act="luSet" data-k="mode" data-v="${k}">${LU_TABS[k]}</button>`).join('')}</div>
       <div class="grid3 lu-opts"><button class="btn small" data-act="luOpt" data-k="lineup">Optimize Lineup</button><button class="btn small" data-act="luOpt" data-k="minutes">Optimize Minutes</button><button class="btn small" data-act="luEdit" data-id="${sel ?? plan.rows[0]?.p.id}">Edit Minutes</button></div>
       <div class="grid2 lu-opts"><button class="btn small" data-act="luHealthy" data-k="save">💾 Save Healthy Lineup</button><button class="btn small" data-act="luHealthy" data-k="use" ${lsGet(luHealthyKey(t), null) ? '' : 'disabled'}>❤️ Use Healthy Lineup</button></div>
+      ${(() => { const pc = promiseCheck(t, plan); if (!pc.length) return ''; const bad = pc.filter(c => !c.okStart || !c.okMin).length;
+        return `<button class="btn small ${state.luPromOpen ? 'on' : ''}" data-act="luPromises" style="width:100%;margin-top:6px">🤝 Promises (${pc.length})${bad ? ` · <span class="down">${bad} broken</span>` : ''}</button>
+        ${state.luPromOpen ? `<div class="lu-prom">${pc.map(c => `<div class="drill-row"><span class="grow small"><b class="tap" data-act="openPlayer" data-id="${c.p.id}">${esc(playerName(c.p))}</b> <span class="muted">· ${esc(c.x.src)}</span><br>
+          ${c.x.start ? `<span class="${c.okStart ? 'up' : 'down'}">${c.okStart ? '✓' : '✗'} Starts</span>` : ''}${c.x.start && c.need ? ' · ' : ''}${c.need ? `<span class="${c.okMin ? 'up' : 'down'}">${c.okMin ? '✓' : '✗'} ${c.need}+ minutes (has ${c.min})</span>` : ''}</span></div>`).join('')}</div>` : ''}`; })()}
       ${isStep('rotation') ? '<button class="btn focus" data-act="luApply" style="width:100%;margin-top:8px">✅ Done</button>' : ''}
       <p class="note small ${sel != null ? 'gold' : 'muted'}" style="margin-top:6px">${sel != null ? 'Tap another player to swap them, or Edit Minutes for his minutes by position.' : 'Tap a player to pick him, then another to swap them. Changes save as you go.'}</p>
       <div class="drill-row"><span class="grow small">Players in the rotation</span><span class="trait-ctl"><button class="btn tiny" data-act="luSet" data-k="size" data-v="${Math.max(5, plan.rot.length - 1)}" ${plan.rot.length <= 5 ? 'disabled' : ''}>−</button><b class="small" style="min-width:2em;text-align:center">${plan.rot.length}</b><button class="btn tiny" data-act="luSet" data-k="size" data-v="${Math.min(12, plan.rot.length + 1)}" ${plan.rot.length >= 12 ? 'disabled' : ''}>+</button></span></div>
@@ -9486,6 +9527,7 @@ function luPlan(t, a) {
 }
 // Pick where a player starts (PG to C), or send a picked starter back to the bench.
 // Tap a spot: pick that player; tap another: swap them (a starter's spot for the other, or into the five).
+actions.luPromises = () => { state.luPromOpen = !state.luPromOpen; render(); };
 actions.luTap = d => {
   const a = { ...luArgs() }, pid = +d.id;
   if (a.sel == null) { a.sel = pid; replace('lineup', a); return; }
@@ -10335,7 +10377,7 @@ const glRow = (p, right) => `<div class="drill-row"><span class="grow tap" style
 function glTeamBox(t) {
   const L = league(), y = L.season.currentYear, recs = glSeason(y), open = glOpen(L);
   const down = Object.entries(recs).filter(([, r]) => r.tid === t.id && !r.back).map(([pid, r]) => ({ p: glPlayer(pid, r), r })).filter(x => x.p);
-  const cand = open ? FA.signedRoster(t).filter(p => !recs[p.id] && p.age <= GL_AGE && proSeasons(p) <= GL_EXP).sort((a, b) => (b.pot || 0) - (a.pot || 0) || a.age - b.age).slice(0, 8) : [];
+  const cand = open ? FA.signedRoster(t).filter(p => !recs[p.id] && p.age <= GL_AGE && proSeasons(p) <= GL_EXP).sort((a, b) => shownLevel(a) - shownLevel(b) || (a.pot || 0) - (b.pot || 0)) : [];   // worst on top, best at the bottom
   const full = down.length >= GL_MAX;
   return `<fieldset class="frame"><legend>${esc(t.shortName)} · G League ${down.length}/${GL_MAX}</legend>
     <p class="note small">${FA.signedRoster(t).length}/15 on the active roster. Players down here don't count against it, and <b>Hoop Land won't show them</b>: they're kept here in Hoop Land Plus. Call one up any time this season; trim the active roster to 14 first to make room.</p>
@@ -14176,7 +14218,8 @@ actions.namesUndo = () => {
   render();
 };
 
-actions.draftTab = d => replace('draft', { tab: d.t });
+// Switching draft tabs keeps your place: each tab comes back where you left it, a new one opens where you are.
+actions.draftTab = d => { const m = (state.draftY ||= {}), cur = document.querySelector('[data-act="draftTab"].on')?.dataset.t; if (cur) m[cur] = window.scrollY; state.keepY = m[d.t] ?? window.scrollY; replace('draft', { tab: d.t }); };
 
 // Your teams at a glance: stage, needs and draft capital.
 function outlookCard() {
@@ -14203,7 +14246,7 @@ function outlookCard() {
       <dl class="ol-grid">
         <dt>Needs</dt><dd class="ol-needs">${o.needs.map(need).join('') || '<span class="muted">—</span>'}</dd>
         <dt>This draft</dt><dd class="ol-picks">${now.map(x => `<span class="ol-pick">${x}</span>`).join('') || '<span class="muted">No picks</span>'}</dd>
-        <dt>Future</dt><dd class="ol-future">${future.join('') || '<span class="muted">—</span>'}</dd>
+        <dt>Future</dt><dd class="ol-future">${future[0] || '<span class="muted">—</span>'}${future.length > 1 ? `<details class="ol-more" data-keep="olfut-${t.id}" ${state.keepOpen?.[`olfut-${t.id}`] ? 'open' : ''}><summary class="small">More years (${future.length - 1})</summary>${future.slice(1).join('')}</details>` : ''}</dd>
       </dl>
       <button class="btn small" data-act="nav" data-to="capital" data-arg="${t.id}">📋 Draft Capital</button>
     </div>`;
@@ -14337,15 +14380,17 @@ function draftWarRoom() {
   const board = myBoard();
   const lists = BOARD_FILTERS.filter(([k]) => k !== 'board');
   if (boardF().f === 'board') state.boardF = { ...boardF(), f: 'all' };
-  const filtered = boardF().f !== 'all' || boardF().pos !== 'all';
   return {
     html: `${board.length ? boardFilterBar(lists) : ''}<fieldset class="frame"><legend>Your Board</legend>
         ${board.length ? `<div class="list">${(() => {
-          const tiers = filtered ? [] : boardStore().tiers;
+          // Your tiers show with a filter on too: a header wherever the next player shown is in a new tier.
+          const tiers = boardStore().tiers;
           const head = n => `<div class="tier-break"><span>Tier ${n}</span></div>`;
-          return board.map((p, i) => !boardFilterOk(p) ? '' : `${tiers.length && (i === 0 || tiers.includes(i)) ? head(tierAt(tiers, i)) : ''}<div class="board-row">${prospectRow(p, '', { mine: true }).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
+          let shown = 0;
+          const tierHead = i => { if (!tiers.length) return ''; const n = tierAt(tiers, i); if (n === shown) return ''; shown = n; return head(n); };
+          return board.map((p, i) => !boardFilterOk(p) ? '' : `${tierHead(i)}<div class="board-row">${prospectRow(p, '', { mine: true }).replace('<span class="name">', `<span class="name"><span class="rank-no">${i + 1}</span>`)}
           <div class="mv2 mv3"><button class="mvbtn" data-act="moveBoard" data-id="${p.id}" data-dir="-1" aria-label="Move up" ${i ? '' : 'disabled'}>▲</button><button class="mvbtn" data-act="moveBoard" data-id="${p.id}" data-dir="1" aria-label="Move down" ${i < board.length - 1 ? '' : 'disabled'}>▼</button><button class="mvbtn x" data-act="toggleBoard" data-id="${p.id}" aria-label="Remove from your board">✕</button></div></div>
-          ${i < board.length - 1 && !filtered ? `<button class="tier-add ${tiers.includes(i + 1) ? 'on' : ''}" data-act="tierBreak" data-i="${i}" aria-label="${tiers.includes(i + 1) ? 'Remove the tier break here' : 'Add a tier break here'}">${tiers.includes(i + 1) ? '✕ Remove tier break' : '＋ Tier break'}</button>` : ''}`).join('');
+          ${i < board.length - 1 ? `<button class="tier-add ${tiers.includes(i + 1) ? 'on' : ''}" data-act="tierBreak" data-i="${i}" aria-label="${tiers.includes(i + 1) ? 'Remove the tier break here' : 'Add a tier break here'}">${tiers.includes(i + 1) ? '✕ Remove tier break' : '＋ Tier break'}</button>` : ''}`).join('');
         })()}</div>
         <p class="note muted small" style="margin-top:6px">Tap "＋ Tier break" between two players to start a new tier there.</p>`
         : '<p class="note">Your board is empty. Add prospects from Prospects with +, then order them here. When you\'re on the clock, your board comes first.</p>'}

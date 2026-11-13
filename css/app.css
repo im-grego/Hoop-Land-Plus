@@ -2495,3 +2495,10 @@ body::after {
   background: var(--bg) url("../icons/bg-tile.jpg") 0 0 / 300px 200px repeat; image-rendering: pixelated;
 }
 #app { min-height: 100vh; min-height: 100lvh; box-sizing: border-box; }
+/* Draft outlook: next year's picks, the rest in a dropdown */
+.ol-more { margin-top: 4px; }
+.ol-more > summary { cursor: pointer; color: var(--dim, #b9c8e8); font-weight: 700; padding: 2px 0; list-style: none; }
+.ol-more > summary::-webkit-details-marker { display: none; }
+.ol-more > summary::before { content: "▸ "; }
+.ol-more[open] > summary::before { content: "▾ "; }
+.ol-more > .ol-yr { margin-top: 4px; }
