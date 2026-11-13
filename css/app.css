@@ -2502,3 +2502,7 @@ body::after {
 .ol-more > summary::before { content: "▸ "; }
 .ol-more[open] > summary::before { content: "▾ "; }
 .ol-more > .ol-yr { margin-top: 4px; }
+
+/* Dropbox upload progress */
+.dbx-bar { height: 14px; border: 2px solid var(--btn-edge, #1b5fc1); background: #0b2f6b; margin: 6px 0 4px; }
+.dbx-bar > i { display: block; height: 100%; background: var(--up, #4ade80); transition: width 0.15s linear; }

@@ -73,7 +73,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.366.3';
+const APP_VERSION = '0.366.4';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.0';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -118,7 +118,7 @@ const DEVLOG = [
       'Draft outlook shows next year\'s picks, with the rest of your future picks in a dropdown',
       'Draft tabs keep your place when you switch between Prospects, My Board and Front Office',
       'G League send-down list runs from worst to best',
-      'After saving a season file: copy it to the clipboard, or upload it to Dropbox with the link copied for Hoop Land',
+      'After saving a season file: copy it to the clipboard, or upload it to Dropbox (with a progress bar) and the link is copied for Hoop Land',
       'Potential can be set as high as 12 in the editor (no player gets past 10 on his own), and trade value keeps climbing with it',
     ]],
     ['CPU Logic', [
@@ -23585,9 +23585,21 @@ actions.dbxConnectOnce = async () => {
 actions.dbxShare = () => dbxShareFile(null);
 // Upload a season file (built now, or the one just saved) and copy its link for Hoop Land.
 async function dbxShareFile(built) {
-  const o = overlay('<div class="spinner"></div><p class="note">Uploading to Dropbox…</p>');
+  const o = overlay(`<p class="note"><b>☁️ Uploading to Dropbox</b></p><div class="dbx-bar"><i style="width:0%"></i></div>
+    <p class="note small center" data-pct>${built ? 'Starting…' : 'Building the file…'}</p>`);
+  const bar = o.querySelector('.dbx-bar > i'), pct = o.querySelector('[data-pct]');
+  const show = (f, label) => { bar.style.width = `${Math.round(f * 100)}%`; pct.textContent = label ?? `${Math.round(f * 100)}% of ${mb} MB`; };
+  let mb = '';
   // Start the clipboard write inside the tap (Safari needs it there), filled in when the link is ready.
-  const work = (async () => { await nextFrame(); const file = built || buildExport(); const path = await dropboxUploadFixed(file, file.name); return dropboxShareLink(path); })();
+  const work = (async () => {
+    await nextFrame();
+    const file = built || buildExport();
+    mb = (file.size / 1e6).toFixed(1);
+    show(0);
+    const path = await dropboxUploadFixed(file, file.name, f => show(f));
+    show(1, 'Uploaded · getting the link…');
+    return dropboxShareLink(path);
+  })();
   let copied = false;
   const early = (window.ClipboardItem && navigator.clipboard?.write)
     ? navigator.clipboard.write([new ClipboardItem({ 'text/plain': work.then(u => new Blob([u], { type: 'text/plain' })) })]).then(() => { copied = true; }).catch(() => {})
