@@ -66,6 +66,9 @@ import * as PO from './playoffs.js';
 import * as CL4 from './careerlife4.js';
 import { setGameClock, secsOf, minScale } from './gameclock.js';
 import APPEARANCE_POOL from './appearance-pool.js';
+import { familyNumber } from './jerseyrules.js';
+import GEAR_KEEP from './gearkeep.js';
+GEAR.setKeep(GEAR.keepFrom(GEAR_KEEP));   // the league file's gear kept on purpose stays
 import * as CO from './coaching.js';
 import { JERSEYS } from './jerseys.js';
 import { leagueCuts, TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
@@ -73,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.15';
+const APP_VERSION = '0.367.16';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -83,6 +86,8 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Start a Franchise files come ready: every jersey number sorted out, retired numbers in order on the rafters, gear and suits matched',
+      'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
       'Start a Franchise: Nov 14, with real results through Nov 13 and today\'s injury report',
       'Free agent lists show stars, level, position and age; the stats are on the player\'s page',
       'Scouting Report: Player to Watch, the opponent\'s top scorer on a card (his face in his team\'s colors, his league ranks and line), with three keys to stopping him',
@@ -8090,7 +8095,8 @@ const loadBless = () => { try { return JSON.parse(localStorage.getItem(blessKey(
 // A player already wearing a retired number from before (Cade's #2 in Detroit, a #6 worn before it went up league-wide)
 // keeps it: he wore it for this team in an earlier season.
 const grandfathered = (team, p, num) => (p.stats || []).some(s => s.league === 0 && s.yr < league().season.currentYear && (s.season || []).some(r => r.tid === team.id && r.num === num && r.GP > 0));
-setBlessed((team, p, num) => !!state.data && !isCollege() && (grandfathered(team, p, num) || loadBless().some(b => b.tid === team.id && b.pid === p.id && b.num === num)));
+// Family: his father's (or a relative's) retired number, like Tim Hardaway Jr. in his dad's #10 in Miami.
+setBlessed((team, p, num) => !!state.data && !isCollege() && (grandfathered(team, p, num) || familyNumber(league(), team, p, num) || loadBless().some(b => b.tid === team.id && b.pid === p.id && b.num === num)));
 const jerseyKey = () => `hlc:jersey:${saveId()}:${league().season.currentYear}`;
 function jerseyStore() {
   const c = calFlags();
@@ -24277,3 +24283,11 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     location.reload();
   });
 }
+
+// For the season tools (tools/season/app-retired.cjs sets window.__hlcTool first): the retired numbers each team has once the
+// app has loaded a file (its own fixes and the CPU teams' new honors included), so a start file can carry them.
+if (window.__hlcTool) window.hlcTool = {
+  retired: () => league().teams.map(t => ({ tid: t.id, list: (t.retiredNumbers || []).map(r => ({ ...r })) })),
+  // What the app would still flag on this file: jersey clashes, players whose gear needs matching, suits to redo.
+  check: () => { const L = league(), g = GEAR.matchLeague(L, APPEARANCE_POOL.tattoos), s = GEAR.matchSuitsLeague(L); const out = { clashes: jerseyClashes(L).map(c => `${c.team.shortName} ${c.p.ln} #${c.p.num}`), gear: new Set(g.map(x => x.p)).size, suits: new Set(s.map(x => x.m)).size }; GEAR.undoMatch(g); GEAR.undoSuits(s); return out; },
+};
