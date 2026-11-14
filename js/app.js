@@ -74,7 +74,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.19';
+const APP_VERSION = '0.367.20';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -84,6 +84,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Editing a player\'s ratings shows the stat each rating drives right over its bar',
       'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics and the in-season tournament',
       'Your team\'s account no longer calls an opening-night win "another" one',
       'Start a Franchise files come ready: every jersey number sorted out, retired numbers in order on the rafters, gear and suits matched',
@@ -12895,7 +12896,25 @@ function gLine(p, snap, k, edit = false, ceilMode = false) {
     ${edit ? gBtn('attr', `data-k="${k}" data-dir="1"`, ceilMode && !PHYSICAL.includes(k) ? G_UP : G_PLUS, `Raise ${ATTR_NAMES[k]}`) : ''}
   </div>`;
 }
-const gAllLines = (p, snap, edit, ceilMode) => `<div class="glines">${CATEGORIES.map(c => `<div class="gcat">${c.attrs.map(k => gLine(p, snap, k, edit, ceilMode)).join('')}</div>`).join('')}</div>`;
+// While editing: the stat each rating drives, over its bar (this season's per game, last season's before he plays), so
+// a rating can be set where his numbers are.
+function ratingStats(p) {
+  const L = league(), yr = L.season.currentYear;
+  const sum = y => { const s = (p.stats || []).find(x => x.league === state.leagueIdx && x.yr === y); const T = { GP: 0, MIN: 0 };
+    for (const r of s?.season || []) { T.GP += r.GP || 0; T.MIN += (r.MIN?.[0] || 0) / 60; for (const k of ['PTS', 'REB', 'ORB', 'AST', 'STL', 'BLK', 'TO', 'PF', 'FGM', 'FGA', 'TPM', 'TPA', 'FTM', 'FTA']) T[k] = (T[k] || 0) + (r[k] || 0); }
+    return T; };
+  let T = sum(yr), when = 'this season';
+  if (!T.GP) { T = sum(yr - 1); when = 'last season'; }
+  if (!T.GP) return null;
+  const g = k => (T[k] / T.GP).toFixed(1), pc = (m, a) => (T[a] ? `${(T[m] / T[a] * 100).toFixed(1)}%` : '–');
+  const twoA = T.FGA - T.TPA, two = twoA ? `${((T.FGM - T.TPM) / twoA * 100).toFixed(1)}%` : '–';
+  return { when, gp: T.GP, k: {
+    LAY: `2P ${two} on ${(twoA / T.GP).toFixed(1)}`, DNK: `2P ${two} · ${g('FTA')} FTA`, INS: `${g('PTS')} PTS · 2P ${two}`, MID: `FG ${pc('FGM', 'FGA')} on ${g('FGA')}`,
+    TPT: `3P ${pc('TPM', 'TPA')} on ${g('TPA')}`, FTS: `FT ${pc('FTM', 'FTA')} on ${g('FTA')}`, DRB: `${g('TO')} TO · ${g('AST')} AST`, PAS: `${g('AST')} AST · ${g('TO')} TO`,
+    ORE: `${g('ORB')} OREB`, DRE: `${((T.REB - T.ORB) / T.GP).toFixed(1)} DREB`, STL: `${g('STL')} STL`, BLK: `${g('BLK')} BLK`,
+    STR: `${g('REB')} REB · ${g('PF')} PF`, SPD: `${g('STL')} STL · ${g('FTA')} FTA`, STM: `${(T.MIN / T.GP).toFixed(1)} MPG` } };
+}
+const gAllLines = (p, snap, edit, ceilMode, st = null) => `${st ? `<p class="note small muted gstat-head">Stats over each rating: ${st.when}, ${st.gp} games, per game</p>` : ''}<div class="glines">${CATEGORIES.map(c => `<div class="gcat">${c.attrs.map(k => `${st ? `<div class="gstat">${esc(st.k[k] || '')}</div>` : ''}${gLine(p, snap, k, edit, ceilMode)}`).join('')}</div>`).join('')}</div>`;
 // A category at a glance: its average bar (gold to red past his peak when declining), opening to its three ratings.
 function gGroup(p, snap, c) {
   const rows = c.attrs.map(k => gKinds(p, snap, k)), avg = f => rows.reduce((a, r) => a + f(r), 0) / rows.length;
@@ -13342,7 +13361,7 @@ function oldPlayerScreen(args) {
           <button class="btn square" data-act="potAdj" data-dir="1" aria-label="Higher potential">+</button>
         </div>
         <div class="stack">
-          ${ATTRS.map(k => attrRow(p, snap, k, ceilMode)).join('')}
+          ${(st => `${st ? `<p class="note small muted gstat-head">Stats over each rating: ${st.when}, ${st.gp} games, per game</p>` : ''}${ATTRS.map(k => `${st ? `<div class="gstat">${esc(st.k[k] || '')}</div>` : ''}${attrRow(p, snap, k, ceilMode)}`).join('')}`)(editOn() ? ratingStats(p) : null)}
         </div>
         <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn small ${ceilMode ? 'on focus' : 'off'}" data-act="ceilMode">Edit Ceilings</button></div>
       </fieldset>`;
@@ -13489,7 +13508,7 @@ function newPlayerScreen(args) {
   const ratingsView = `<fieldset class="frame g-frame"><legend>Ratings</legend>${edit ? infoBtn('ratings', RATINGS_HELP) : ''}
       <div class="g-pot"><span>Potential</span>${ev(p, 'pot', potStars(p))}${declining(p) ? ' <span class="small down">Declining</span>' : ''}${edit ? `<span class="muted small"> ${capLeft > 0 ? `${capLeft} pts of room` : capLeft === 0 ? 'ceilings at potential' : `${-capLeft} pts over`}</span>` : ''}</div>
       ${tempLine(p)}
-      ${gAllLines(p, snap, false, false)}
+      ${gAllLines(p, snap, false, false, edit && !isCollege() ? ratingStats(p) : null)}
       ${skillsChips(p)}</fieldset>`;
   const content = `${edit ? '' : newsBox(p)}${rankBox(p, mpg)}${ratingsView}${edit ? `${trainer}${apCard}${skills}` : ''}${plOutlookBox(p, team)}${milestonesBox(p, true)}${arcBox(p)}
       <fieldset class="frame"><legend>Scouting Report</legend>${shortReport(profileReport(p, team))}${playerTags(p) ? `<div class="pl-tags">${playerTags(p)}</div>` : ''}</fieldset>
