@@ -73,7 +73,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.4';
+const APP_VERSION = '0.367.5';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -83,6 +83,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Every active player\'s face now comes with the app: cards and lists show them without importing',
       'Scouting Report: Player to Watch, the opponent\'s top scorer on a card (his face in his team\'s colors, his league ranks and line), with three keys to stopping him',
       'Team stats show shot volume next to efficiency: shots, threes taken, the share of shots from three and free throws a game (Scouting Report and League → Teams)',
       'Scouting Report reads volume and efficiency together: a team that rarely shoots threes but makes them is called inside-out, not a three-point team',
@@ -592,11 +593,21 @@ function logoUrl(url) {
   return url;
 }
 // Player faces cut from the game's roster screens (a face pack), keyed by player id. Nothing shows without one.
-const faceOf = p => (p && state.faces?.get?.(p.id)) || '';
+// Faces bundled with the app (data/faces/nba.json, cut from the game's own roster screens) for the pro league, by name
+// (player ids differ from save to save). A face you import yourself wins.
+const faceName = p => `${p?.fn || ''} ${p?.ln || ''}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+let bundledFaces = null;
+function loadBundledFaces() {
+  if (bundledFaces) return;
+  bundledFaces = new Map();
+  fetch('data/faces/nba.json').then(r => (r.ok ? r.json() : {})).then(m => { bundledFaces = new Map(Object.entries(m)); if (state.data && bundledFaces.size) render(); }).catch(() => {});
+}
+const faceOf = p => (p && (state.faces?.get?.(p.id) || (!isCollege() && bundledFaces?.get(faceName(p))))) || '';
 // Saved faces live in the browser per league (player ids carry over from save to save of the same league).
 const facesKey = () => `hlc:faces:${league().shortName}`;
 function facesStored() { try { return JSON.parse(localStorage.getItem(facesKey())) || {}; } catch { return {}; } }
 function loadFaces() {
+  if (state.data) loadBundledFaces();
   if (!state.data || state.facesFor === facesKey()) return;
   state.facesFor = facesKey();
   const m = facesStored();
