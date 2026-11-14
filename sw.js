@@ -4,7 +4,7 @@
 const LOGOS = 'hlc-logos';
 // The logos bundled with the app (img/logos).
 const LOGO_FILES = ["img/logos/ATL.png", "img/logos/BOS.png", "img/logos/Bulls.png", "img/logos/Cavs.png", "img/logos/Heat.png", "img/logos/Knicks.png", "img/logos/Lakers.png", "img/logos/MIN.png", "img/logos/NOP.png", "img/logos/Nets-1.png", "img/logos/Nuggets.png", "img/logos/Pacers.png", "img/logos/Photo-Jun-29-2025-10-47-21-AM.png", "img/logos/Photo-Jun-29-2025-10-49-49-AM.png", "img/logos/Photo-Jun-30-2025-10-11-45-AM.png", "img/logos/Photo-Jun-30-2025-10-12-46-AM.png", "img/logos/Photo-Jun-30-2025-10-30-21-AM.png", "img/logos/Photo-Jun-30-2025-10-35-00-AM.png", "img/logos/Photo-Jun-30-2025-10-35-37-AM.png", "img/logos/Photo-Jun-30-2025-11-08-52-AM.png", "img/logos/Photo-Jun-30-2025-9-59-16-AM.png", "img/logos/Photo-Oct-07-2025-4-02-19-PM.png", "img/logos/Photo-Oct-12-2025-7-52-04-PM-1.png", "img/logos/Photo-Oct-12-2025-8-04-07-PM-1.png", "img/logos/Pistons.png", "img/logos/Portland.png", "img/logos/Rockets.png", "img/logos/Sacramento-Kings-logo11.png", "img/logos/Spurs.png", "img/logos/Thunder.png", "img/logos/Vegaslogo-1.png", "img/logos/hmmmmmm.png"];
-const VERSION = 'hlc-v0.367.16';
+const VERSION = 'hlc-v0.367.17';
 const SHELL = [
   './',
   'index.html',
@@ -19,7 +19,7 @@ const SHELL = [
   'js/livedraft.js',
   'js/trades.js',
   'js/traderules.js', 'js/regression.js', 'js/skillinfo.js', 'js/autoplay.js', 'js/leagueexport.js', 'js/settle.js', 'js/leaguepack.js', 'js/leaguetemplate.js', 'js/plays.js', 'js/coachprofile.js', 'js/coachmarket.js', 'js/schemeevo.js', 'js/names.js', 'js/classgen.js', 'js/ego.js', 'js/career.js', 'js/careerlife.js', 'js/talks.js', 'js/careerlife2.js', 'js/lineups.js', 'js/pixelicons.js', 'js/faceimport.js', 'js/expansion.js', 'js/realclasses.js', 'js/classtools.js', 'js/teampresets.js', 'js/fantasy.js', 'js/careerlife3.js', 'js/playoffs.js', 'js/careerlife4.js', 'js/gameclock.js', 'js/gear.js', 'js/scoring.js',
-  'js/realpicks.js', 'js/influence.js', 'js/jerseyrules.js', 'js/gearkeep.js',
+  'js/realpicks.js', 'js/influence.js', 'js/jerseyrules.js',
   'js/facilities.js',
   'js/predraft.js', 'js/jerseys.js',
   'js/presser.js',

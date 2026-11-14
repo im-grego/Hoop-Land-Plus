@@ -67,8 +67,6 @@ import * as CL4 from './careerlife4.js';
 import { setGameClock, secsOf, minScale } from './gameclock.js';
 import APPEARANCE_POOL from './appearance-pool.js';
 import { familyNumber } from './jerseyrules.js';
-import GEAR_KEEP from './gearkeep.js';
-GEAR.setKeep(GEAR.keepFrom(GEAR_KEEP));   // the league file's gear kept on purpose stays
 import * as CO from './coaching.js';
 import { JERSEYS } from './jerseys.js';
 import { leagueCuts, TIER_NAMES, setStyleRefs, teamStanding, teamBooks, rosterNeeds, teamIdentity, draftPosition, rumorMill, playStyles, styleLine, styleSentence, playRead, wontDo, TEND_LABELS, TEND_GROUPS, groupOf } from './overview.js';
@@ -76,7 +74,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.16';
+const APP_VERSION = '0.367.17';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -86,6 +84,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Your team\'s account no longer calls an opening-night win "another" one',
       'Start a Franchise files come ready: every jersey number sorted out, retired numbers in order on the rafters, gear and suits matched',
       'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
       'Start a Franchise: Nov 14, with real results through Nov 13 and today\'s injury report',
@@ -12241,6 +12240,10 @@ function tradeBlocks(L) {
 // notes it the day it sees it). Roster moves land in order with the games, newest first.
 const WIN_LINES = ['Another dub.', 'Business handled.', 'That\'s a W.', 'Ball game.', 'Mission passed. Respect earned.', 'On to the next.', 'Good win. Better team.', 'We take that one.'];
 const ROAD_WIN_LINES = ['Flying home happy.', 'Road dub.', 'Took care of business on the road.'];
+// The season's first game, won: nothing that sounds like there was a game before it.
+const OPENER_WIN_LINES = ['Opening night win.', 'Good way to start the year.', 'Season opener: handled.', 'Night one goes our way.'];
+// The first win after losing the opener(s): the first one, not another one.
+const FIRST_WIN_LINES = ['First W of the year.', 'In the win column.', 'Got the first one.'];
 // The hype line for a huge night, in the team account's voice.
 function hypeLine(nm, r, salt) {
   const [pts, reb, ast, stl, blk, td] = r;
@@ -12302,7 +12305,8 @@ function teamPostsOf(tm) {
     const bn = nights[g.gId], star = bn ? tm.roster.find(q => q.id === bn.pid) : null;
     let text;
     if (won) {
-      const line = !home && roadWins % 2 === 0 ? ROAD_WIN_LINES[(roadWins / 2) % ROAD_WIN_LINES.length] : WIN_LINES[wins % WIN_LINES.length];
+      const line = n === 1 ? OPENER_WIN_LINES[tm.id % OPENER_WIN_LINES.length] : wins === 0 ? FIRST_WIN_LINES[tm.id % FIRST_WIN_LINES.length]
+        : !home && roadWins % 2 === 0 ? ROAD_WIN_LINES[(roadWins / 2) % ROAD_WIN_LINES.length] : WIN_LINES[wins % WIN_LINES.length];
       if (!home) roadWins++; wins++;
       text = `${esc(line)}<br>${esc(tm.shortName)} ${my}, ${esc(opp?.shortName || '')} ${their}`;
     } else text = `Final. ${esc(opp?.shortName || '')} ${their}, ${esc(tm.shortName)} ${my}`;
