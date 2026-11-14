@@ -74,7 +74,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.18';
+const APP_VERSION = '0.367.19';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -84,6 +84,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics and the in-season tournament',
       'Your team\'s account no longer calls an opening-night win "another" one',
       'Start a Franchise files come ready: every jersey number sorted out, retired numbers in order on the rafters, gear and suits matched',
       'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
@@ -3430,9 +3431,10 @@ const ROADMAP = [
     ['The full offseason', 'Lottery, scouting, the draft, contracts, free agency, trades, training camp and final cuts, for Franchise saves.'],
   ]],
   ['🔜 Coming soon', 'gold', [
-    ['In-season mode', 'Check-ins during the regular season: trades, G League call-ups, morale and the deadline.'],
-    ['All-Star break check-in', 'All-Star weekend, mid-season awards races and a look at where your season stands.'],
-    ['Playoff check-in', 'The bracket, title odds, a scouting report on your opponent and playoff risers.'],
+    ['Draft class overhaul', 'Deeper, more realistic draft classes: real prospects, better ratings and potential, and classes that feel different year to year.'],
+    ['Scouting', 'A full scouting department: send scouts out, narrow down ceilings, and learn which prospects are real before draft night.'],
+    ['Olympics', 'The Olympic tournament in the summer: national team rosters, the bracket and medals for your players.'],
+    ['In-season tournament', 'The NBA Cup: group play, the knockout rounds and a champion crowned in December.'],
   ]],
   ['🔭 Further down the line', '', [
     ['College offseason', 'Recruiting, the transfer portal, NIL and the coaching carousel for College saves.'],
