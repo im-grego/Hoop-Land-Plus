@@ -73,12 +73,21 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.366.9';
+const APP_VERSION = '0.367.0';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
-const SHOWN_VERSION = 'Beta 0.2.0';
+const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
 // the player hasn't looked at yet.
 const DEVLOG = [
+  { v: 'Beta 0.2.1', sections: [
+    ['Features', [
+      'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
+      'The Expansion Draft step can be skipped',
+    ]],
+    ['Bug Fixes', [
+      'A step whose screen breaks now offers a Skip instead of leaving you stuck',
+    ]],
+  ] },
   { v: 'Beta 0.2.0', sections: [
     ['Features', [
       'Start a Franchise right in the app: take control of a team, make your moves, then export it and load it into Hoop Land',
@@ -157,7 +166,6 @@ const DEVLOG = [
       'Tiers on My Board show with a filter on',
       'Team and player options on contracts already in their last year are cleared (a pending extension stays)',
       'A prospect\'s class (Fr, So, Jr, Sr) matches his scouting background',
-      'The expansion draft can be skipped, and a step whose screen breaks offers a Skip instead of leaving you stuck',
     ]],
   ] },
 ];
@@ -883,6 +891,7 @@ function replace(name, args = {}) {
 // a new screen, tab or view starts at the top.
 let lastView = '';
 function render() {
+  resumeSoon();
   loadFaces();
   document.documentElement.dataset.px = state.params.pixelIcons === false ? 'off' : 'on';
   if (state.data) { FA.setQualifyingOffers(optStore().qo); FA.setCapSystem(isComplete() && state.params.capSystem !== false && !isCollege()); FA.setComplete(isComplete() && !isCollege(), FA.capLines(league()).cap); FX.setFacilitiesOn(isComplete() && !isCollege()); if (!isCollege()) syncGrudges(); if (!isCollege()) syncDead(); FA.setHoldTeams(league().teams.filter(isUserTeam).map(t => t.id)); FA.setHoldDay(league().season.phase === 6 ? league().season.currentDay : 0); syncTpes(); syncExpansion(); if (!isCollege()) { fitClassIncoming(); realClassCheck(); } }
@@ -1125,6 +1134,87 @@ actions.loadLink = async () => {
     await loadFile(new File([text], name, { type: 'application/octet-stream' }));
   } catch (e) { o.remove(); toast('Couldn\'t load that link', e.message, 7000, true); }
 };
+// ---- Resume: the save you're working on, kept on this device (IndexedDB) so closing the app doesn't lose it. Written a
+// few seconds after you do something and right away when the app goes to the background; the start screen offers it
+// back. Restored like Undo: the save as the app had it, plus the calendar's progress (no load-time processing again).
+const RES_DB = 'hlc-resume';
+function resDb() {
+  return new Promise((res, rej) => { const r = indexedDB.open(RES_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function resIO(mode, fn) {
+  const db = await resDb();
+  return new Promise((res, rej) => { const tx = db.transaction('kv', mode), st = tx.objectStore('kv'); let out; const r = fn(st); if (r) r.onsuccess = () => { out = r.result; };
+    tx.oncomplete = () => { db.close(); res(out); }; tx.onerror = tx.onabort = () => { db.close(); rej(tx.error); }; });
+}
+const resGet = k => resIO('readonly', st => st.get(k));
+const resPut = (k, v) => resIO('readwrite', st => st.put(v, k));
+const resClearAll = () => resIO('readwrite', st => st.clear());
+function resLabel() {
+  const L = league(), t = myTeam(), cur = (() => { try { return currentStep(); } catch { return null; } })();
+  const stage = cur && phaseRank(L.season) >= 1 ? `${dispYr(L.season.currentYear)} Offseason · ${cur.title}` : `${dispYr(L.season.currentYear)} season${L.season.currentDay ? ` · day ${L.season.currentDay}` : ''}`;
+  return { name: L.meta?.saveName || state.fileName || 'Season file', team: t ? teamFull(t) : '', stage };
+}
+async function resumeSave() {
+  if (!state.data || state.leagueFile || state.resBusy || !window.indexedDB || state.resGen === state.resSaved) return;
+  state.resBusy = true;
+  const gen = state.resGen;
+  try {
+    const text = serializeSave(state.data);
+    await resPut('save', { text, cal: JSON.stringify(state.cal || {}), fileName: state.fileName, dirty: state.dirty });
+    const meta = { ...resLabel(), at: Date.now(), mb: +(text.length / 1e6).toFixed(1) };
+    await resPut('meta', meta);
+    state.resMeta = meta;
+    state.resSaved = gen;
+  } catch (err) { console.warn('resume save failed', err); }
+  state.resBusy = false;
+}
+// After something happens: save within a few seconds (not on every tap).
+function resumeSoon() {
+  if (!state.data || state.leagueFile) return;
+  state.resGen = (state.resGen || 0) + 1;
+  if (!state.resTimer) state.resTimer = setTimeout(() => { state.resTimer = null; resumeSave(); }, 6000);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') resumeSave(); });
+window.addEventListener('pagehide', () => resumeSave());
+try { if (window.indexedDB) resGet('meta').then(m => { state.resMeta = m || null; if (!state.data && m) render(); }).catch(() => {}); } catch { /* no storage */ }
+function resumeCard() {
+  const m = state.resMeta;
+  if (!m) return '';
+  const ago = (() => { const s = Math.round((Date.now() - m.at) / 60000); return s < 1 ? 'just now' : s < 60 ? `${s} min ago` : s < 1440 ? `${Math.round(s / 60)} h ago` : `${Math.round(s / 1440)} d ago`; })();
+  return `<fieldset class="frame resume-card"><legend>▶ Pick Up Where You Left Off</legend>
+    <p class="note"><b>${esc(m.team || m.name)}</b><br><span class="small">${esc(m.stage || '')}</span><br><span class="small muted">${esc(m.name)} · saved ${ago} on this device</span></p>
+    <div class="grid2"><button class="btn focus" data-act="resume">▶ Resume</button><button class="btn off" data-act="resumeClear">Clear</button></div>
+    <p class="note small muted">Kept on this device only. Export to move it to Hoop Land or another device.</p></fieldset>`;
+}
+actions.resume = async () => {
+  const o = overlay('<div class="spinner"></div><p class="note">Opening where you left off…</p>');
+  await nextFrame();
+  try {
+    const s = await resGet('save');
+    if (!s?.text) throw new Error('Nothing saved on this device');
+    const data = parseSave(s.text);
+    preloadLogos(data); state.logoWaited = false;
+    state.leagueFile = false; state.fileName = s.fileName || 'Season file';
+    state.undo = null; state.undoList = []; state.cutSel = {}; state.cutSeeded = false; state.rm = null; state.calLast = undefined;
+    installData(data);
+    try { state.cal = JSON.parse(s.cal || '{}'); } catch { state.cal = {}; }
+    state.dirty = s.dirty !== false;
+    state.resSaved = state.resGen = 0;
+    countEvent('save-resumed');
+    o.remove();
+    goHome();
+    toast('▶ Back where you left off', state.resMeta?.stage || '');
+  } catch (err) {
+    o.remove();
+    toast('Couldn\'t resume', err?.message || String(err), 4500, true);
+  }
+};
+actions.resumeClear = async () => {
+  if (!(await confirmBox('Clear the save kept on this device? Your exported files aren\'t touched.', 'Clear'))) return;
+  try { await resClearAll(); } catch { /* ignore */ }
+  state.resMeta = null; render();
+};
+
 async function loadFile(file) {
   // A traits file doesn't replace the save: no unsaved-changes question for it.
   if (file.size < 3e6) { try { const d = JSON.parse(await file.text()); if (isTraitsBackup(d)) return loadTraitsFile(d); } catch { /* not JSON: a save */ } }
@@ -3995,6 +4085,7 @@ screens.main = () => {
       title: 'Import File',
       body: `
         <img class="hero" src="icons/banner.jpg" alt="Hoop Land">
+        ${resumeCard()}
         <fieldset class="frame"><legend>Hoop Land Plus</legend>
           <div class="stack">
             <p class="note">Load a <b>Franchise</b> save from the end of the playoffs (Pre-Lottery) and run the whole offseason here: the lottery, the draft, free agency and player development. Export once at the end and load it back into Hoop Land. A save from later in the offseason picks up where it left off.</p>
