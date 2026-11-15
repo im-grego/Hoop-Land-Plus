@@ -74,7 +74,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.26';
+const APP_VERSION = '0.367.27';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -84,6 +84,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Class Lab: Match My League and Generate Names ask before restyling or renaming the whole class',
       'Player profile: his main stats up top under the stars, Trade and Cuts down by Done, personality and play style in Traits',
       'Back and Home take you to the top of the screen',
       'Editing a player\'s ratings shows the stat each rating drives right over its bar',
@@ -14608,7 +14609,9 @@ function classBuild(p, rng) {
   else if (r > 0.92) stm = Math.min(20, stm + 3);           // an outlier with a big motor
   return { reg, stm };
 }
-actions.looksMatch = () => {
+actions.looksMatch = async () => {
+  // It rewrites every prospect's look: a class that already has its looks (a real class built in a league file) loses them.
+  if (!(await confirmBox('<b>Restyle the whole class?</b><br>Every prospect gets a new skin tone, eyes, brows, hair, facial hair and gear drawn from your league. If this class already looks the way you want (real players you styled), skip this.', 'Restyle'))) return;
   const L = league();
   const rng = mulberry32((saveSalt() ^ 0x100c) >>> 0);
   const rng2 = mulberry32((saveSalt() ^ 0xb11d) >>> 0);
@@ -14643,7 +14646,8 @@ actions.looksUndo = () => {
   render();
 };
 
-actions.namesMake = () => {
+actions.namesMake = async () => {
+  if (!(await confirmBox('<b>Rename the whole class?</b><br>Every prospect gets a new name and hometown, and some get a family look to match. If this class already has real names, skip this.', 'Rename'))) return;
   const L = league(), cls = L.draftClass || [];
   if (!cls.length) { toast('No draft class to rename'); return; }
   const rng = mulberry32((saveSalt() ^ 0x4a3e5) >>> 0);
