@@ -76,36 +76,40 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.39';
+const APP_VERSION = '0.367.40';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
 // the player hasn't looked at yet.
 const DEVLOG = [
   { v: 'Beta 0.2.1', sections: [
-    ['Features', [
-      'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
-      'The Expansion Draft step can be skipped',
-      'Hot and cold streaks (and other temporary changes) show in the app, but the file you export keeps everyone\'s real ratings',
-      'Start a Franchise: Nov 16 added (through Nov 15 games, with the official league ratings and sliders)',
-      'Free agency: a level 77+ player never falls through to a camp deal; someone signs him in Week 3',
+    ['Start a Franchise', [
+      'New start dates: Nov 14 and Nov 16, with real results, standings and stats through the night before and that day\'s injury report',
+      'Every start file uses the official NBA 2027 by Grego league: ratings, habits, looks, positions, skills, coaches and sim sliders',
+      'Roster Moves: Risers & Fallers: who went up or down in the latest ratings pass (level and potential), biggest moves first, on Risers and Fallers tabs',
+      'Files come ready to play: real jersey numbers, retired numbers in order on the rafters, gear and suits matched, lineups optimized',
+      'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
       'Every NBA team starts with its three real rivals and the history behind them',
       'The real All-Star hosts: Phoenix in 2027, Miami in 2028',
-      'Start a Franchise: Roster Moves: Risers & Fallers shows who moved in the latest ratings pass',
-      'Class Lab: Match My League and Generate Names ask before restyling or renaming the whole class',
-      'Player profile: his main stats up top under the stars, Trade and Cuts down by Done, personality and play style in Traits',
-      'Back and Home take you to the top of the screen',
-      'Editing a player\'s ratings shows the stat each rating drives right over its bar',
-      'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics and the in-season tournament',
-      'Your team\'s account no longer calls an opening-night win "another" one',
-      'Start a Franchise files come ready: every jersey number sorted out, retired numbers in order on the rafters, gear and suits matched',
-      'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
-      'Start a Franchise: Nov 14, with real results through Nov 13 and today\'s injury report',
-      'Free agent lists show stars, level, position and age; the stats are on the player\'s page',
-      'Scouting Report: Player to Watch, the opponent\'s top scorer on a card (his face in his team\'s colors, his league ranks and line), with three keys to stopping him',
+      'The team picker shows who\'s out (and how long) on the right of a top player\'s row',
+    ]],
+    ['Features', [
+      'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
+      'Scouting Report: Player to Watch, the opponent\'s top scorer on a card (his league ranks and line), with three keys to stopping him read from his own game',
       'Team stats show shot volume next to efficiency: shots, threes taken, the share of shots from three and free throws a game (Scouting Report and League → Teams)',
       'Scouting Report reads volume and efficiency together: a team that rarely shoots threes but makes them is called inside-out, not a three-point team',
       'Scouting Report team stats are colored green or red only when the gap is real; close numbers stay white',
+      'Free agency: a level 77+ player never falls through to a camp deal; a team (contenders first) signs him in Week 3',
+      'Editing a player\'s ratings shows the stat each rating drives right over its bar (shooting, scoring, minutes)',
+      'Edit Ceilings: lowering a ceiling below his rating takes the rating down with it',
+      'Player profile: his main stats up top under the stars, Trade and Cuts down by Done, personality and play style in Traits',
+      'Free agent lists show stars, level, position and age; the stats are on the player\'s page',
+      'Hot and cold streaks (and other temporary changes) show in the app, but the file you export keeps everyone\'s real ratings',
+      'The Expansion Draft step can be skipped',
+      'Class Lab: Match My League and Generate Names ask before restyling or renaming the whole class',
+      'Back and Home take you to the top of the screen',
+      'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics and the in-season tournament',
+      'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
       'A step whose screen breaks now offers a Skip instead of leaving you stuck',
@@ -115,10 +119,13 @@ const DEVLOG = [
       'Strength, speed and stamina never drop below 8',
       'Surgery is only offered after a major injury',
       'Season Preview: an injury comeback counts no more than a season of games, and a player who missed the year is called out for the season',
+      'Defensive Player of the Year favorites need a track record',
       'Top stories only feature signings of Lv 80+ players',
       'Trades before draft day aren\'t called draft-day trades',
       'Media Day\'s Rumors tab shows rumors only',
       'Camp signings explain the 18-player offseason limit and dim the buttons when the roster is full',
+      'Your team\'s account no longer calls an opening-night win "another" one',
+      'Glasses (accessory 10) are no longer flagged as a gear mismatch',
     ]],
   ] },
   { v: 'Beta 0.2.0', sections: [
