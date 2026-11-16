@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.35';
+const APP_VERSION = '0.367.36';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -86,6 +86,7 @@ const DEVLOG = [
     ['Features', [
       'Resume: the save you\'re working on is kept on your device, so closing the app doesn\'t lose it. Pick up where you left off from the start screen',
       'The Expansion Draft step can be skipped',
+      'Start a Franchise: Nov 16 added (through Nov 15 games, with the official league ratings and sliders)',
       'Free agency: a level 77+ player never falls through to a camp deal; someone signs him in Week 3',
       'Every NBA team starts with its three real rivals and the history behind them',
       'The real All-Star hosts: Phoenix in 2027, Miami in 2028',
