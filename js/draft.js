@@ -50,7 +50,7 @@ export const projectedRookie = v => v;
 export const ceilingLevel = pot => 100 - 7 * (10 - Math.min(10, pot || 6));
 export function incomingLevel(p, ready = 0) {
   const r = Math.max(-1, Math.min(1, ready ?? 0)), C = ceilingLevel(p.pot);
-  return Math.min(86, Math.round(C - (11 - 5 * r) * Math.max(0.3, (C - 50) / 36)));   // a 4-star: ready 80, average 75, project 70
+  return Math.min(86, Math.round(C - (20 - 6 * r) * Math.max(0.3, (C - 50) / 50)));   // only a ready 5-star reaches 86; a 4-star: ready 76, average 72, project 67
 }
 export function fitIncoming(p, ready = 0) {
   if (!p?.attributes || !SKILL_ATTRS.every(k => Array.isArray(p.attributes[k]))) return 0;
