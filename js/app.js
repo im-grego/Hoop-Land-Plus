@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.44';
+const APP_VERSION = '0.367.45';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -108,7 +108,7 @@ const DEVLOG = [
       'The Expansion Draft step can be skipped',
       'Class Lab: Match My League and Generate Names ask before restyling or renaming the whole class',
       'Back and Home take you to the top of the screen',
-      'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics and the in-season tournament',
+      'Roadmap: coming soon is the draft class overhaul, scouting, the Olympics, the in-season tournament and Career mode',
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
