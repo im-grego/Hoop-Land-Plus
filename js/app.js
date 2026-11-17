@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.43';
+const APP_VERSION = '0.367.44';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -84,7 +84,7 @@ const SHOWN_VERSION = 'Beta 0.2.1';
 const DEVLOG = [
   { v: 'Beta 0.2.1', sections: [
     ['Start a Franchise', [
-      'New start dates: Nov 14 and Nov 16, with real results, standings and stats through the night before and that day\'s injury report',
+      'New start dates: Nov 14 and Nov 17, with real results, standings and stats through the night before and that day\'s injury report',
       'Every start file uses the official NBA 2027 by Grego league: ratings, habits, looks, positions, skills, coaches and sim sliders',
       'Roster Moves: Risers & Fallers: who went up or down in the latest ratings pass (level and potential), biggest moves first, on Risers and Fallers tabs',
       'Files come ready to play: real jersey numbers, retired numbers in order on the rafters, gear and suits matched, lineups optimized',
