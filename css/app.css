@@ -2590,3 +2590,8 @@ body::after {
 .ru-scroll::-webkit-scrollbar-track { background: rgba(255, 255, 255, .08); }
 .ru-scroll .ru-list { margin: 4px 0; }
 html:has(.ru-box), html:has(.ru-box) body { overflow: hidden; }
+
+/* PC: the page scrolls without a visible scrollbar, so it doesn't eat width and push the app off center.
+   (Lists that want a visible bar, like Roster Moves, keep their own.) */
+html, body { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; width: 0; height: 0; }

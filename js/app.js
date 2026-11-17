@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.54';
+const APP_VERSION = '0.367.55';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -117,6 +117,7 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
+      'On PC the app stays centered: the page scrollbar is hidden (scrolling still works)',
       'Draft prospects no longer come in at Lv 86: only a fully ready five-star reaches it (an average five-star is about 80, a four-star 72), and a class already in your save is refit',
       'A step whose screen breaks now offers a Skip instead of leaving you stuck',
       'Combine Trending posts lay out like the rest of Hoop Gram',
