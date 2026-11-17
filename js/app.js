@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.45';
+const APP_VERSION = '0.367.46';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -89,6 +89,7 @@ const DEVLOG = [
       'Roster Moves: Risers & Fallers: who went up or down in the latest ratings pass (level and potential), biggest moves first, on Risers and Fallers tabs',
       'Files come ready to play: real jersey numbers, retired numbers in order on the rafters, gear and suits matched, lineups optimized',
       'A player may wear a number retired for his family (Tim Hardaway Jr. in his dad\'s #10)',
+      'Nov 17 tells the real story: Dejounte Murray has asked out of New Orleans (Phoenix, Miami and Dallas are calling) and Hoop Gram\'s rumor mill has the names in the news. Nobody else starts on the trade block',
       'Every NBA team starts with its three real rivals and the history behind them',
       'The real All-Star hosts: Phoenix in 2027, Miami in 2028',
       'The team picker shows who\'s out (and how long) on the right of a top player\'s row',
@@ -1342,6 +1343,7 @@ async function loadFile(file) {
     if (!isCollege() && settleRetirees(league())) state.dirty = true;
     if (!isCollege() && playoffRotations()) state.dirty = true;
     if (!isCollege() && applyStreaks()) state.dirty = true;   // hot and cold streaks
+    if (!isCollege()) storyTrades();
     if (!isCollege() && applyFatigue()) state.dirty = true;
     if (!isCollege()) cupKnockout();
     if (!isCollege()) glCatchUp();
@@ -4272,6 +4274,81 @@ const facReady = t => !!t && isComplete() && !isCollege() && FX.FACILITIES.some(
 // contracts and injuries up to the start date. Pick the date and your team, make your moves (trades, minimum
 // signings), export, and load it in Hoop Land once.
 const START_KEY = () => `hlc:start:${saveTag()}`;
+// ---- A start date's story: the trade requests and rumor mill from the real league that day (index.json), kept with
+// the save. Hoop Gram leads with them for the first few weeks; a requested trade goes through a few days in, to one of
+// the teams named (never yours: you make your own calls).
+const storyKey = () => `hlc:story:${saveTag()}`;
+function storyGet() { try { return JSON.parse(localStorage.getItem(storyKey())) || null; } catch { return null; } }
+function storySave(v) { try { localStorage.setItem(storyKey(), JSON.stringify(v)); } catch { /* ignore */ } }
+function storyPosts(L) {
+  const st = storyGet(); if (!st || isCollege() || L.season.currentYear !== st.yr) return [];
+  const day = L.season.currentDay || 0, out = [];
+  const byName = n => L.teams.flatMap(t => t.roster.map(p => ({ p, t }))).find(x => `${x.p.fn} ${x.p.ln}`.toLowerCase() === n.toLowerCase());
+  for (const r of st.requests || []) {
+    const x = byName(r.name); if (!x) continue;
+    const text = r.done ? `It's done: ${r.done}` : r.text;
+    out.push(gpost({ name: handleName('@ShamsCharania'), handle: 'shamscharania', text: esc(gram(`🚨 ${text}`)), act: `data-act="openPlayer" data-id="${x.p.id}"`, foot: `❤️ ${(48000 + x.p.id % 9000).toLocaleString()} · ${esc(x.t.shortName)} · ${esc(playerName(x.p))} ${lvTag(x.p)}` }));
+  }
+  if (day > (st.day || 0) + (st.rumorDays || 21)) return out;
+  const W = [
+    (nm, city) => `Sources: rival teams have called ${city} about ${nm}. The asking price is high, but they're listening.`,
+    (nm, city) => `${nm}'s name keeps coming up in trade talks. ${city} hasn't said no.`,
+    (nm, city) => `Keep an eye on ${nm}. Several contenders see him as the piece that puts them over the top, and ${city} knows it.`,
+    (nm, city) => `League executives expect ${nm} to be one of the most talked-about names before the deadline. ${city} is weighing it.`,
+    (nm, city) => `${city} has started to gauge the market for ${nm}. Nothing is close, but the calls are real.`,
+  ];
+  (st.rumors || []).forEach((n, i) => {
+    const x = byName(n); if (!x || isUserTeam(x.t)) return;
+    const handle = ['@HoopInsider', '@LeagueWhispers', '@CapSpaceGuy', '@TradeMachine', '@CourtsideSources'][i % 5];
+    out.push(gpost({ name: handleName(handle), handle: handleName(handle).toLowerCase(), text: esc(gram(W[(x.p.id + i) % W.length](playerName(x.p), x.t.city || x.t.name))), act: `data-act="openPlayer" data-id="${x.p.id}"`, foot: `❤️ ${(6000 + (x.p.id * 37) % 12000).toLocaleString()} · ${esc(x.t.shortName)} · ${esc(playerName(x.p))} ${lvTag(x.p)}` }));
+  });
+  return out;
+}
+// The requested trade: the first file at least `afterDays` in, one of the named teams (not yours) gets him, with a
+// package the deadline market would accept (salary that works, youth and picks, never its top three).
+function storyTrades() {
+  const L = league(), st = storyGet();
+  if (!st || isCollege() || L.season.phase !== 9 || L.season.currentYear !== st.yr) return false;
+  let did = false;
+  for (const r of st.requests || []) {
+    if (r.done || (L.season.currentDay || 0) < (st.day || 0) + (r.afterDays ?? 3)) continue;
+    const from = L.teams.find(t => t.roster.some(p => p.id === r.pid)), p = from?.roster.find(x => x.id === r.pid);
+    if (!p) { r.done = `${r.name} has moved on.`; continue; }
+    if (isUserTeam(from)) continue;   // he's yours now: your call
+    const yr = L.season.currentYear, vy = dlValueYear(), val = x => playerValue(x, state.leagueIdx, vy), want = val(p);
+    let best = null;
+    for (const code of r.to || []) {
+      const u = L.teams.find(t => t.shortName === code); if (!u || u === from || isUserTeam(u)) continue;
+      const core = new Set([...u.roster].sort((a, b) => val(b) - val(a)).slice(0, 3));
+      const assets = [
+        ...FA.signedRoster(u).filter(x => !core.has(x) && !tradeLock(x) && !justMoved(x) && !untouchableFiller(L, x, u)).map(x => ({ player: x, value: val(x), young: x.age <= 25 })),
+        ...u.draftPicks.filter(pk => pk.yr > draftYear(L) && !FA.pickFrozen(L, u, pk)).map(pk => ({ pick: pk, value: futureValue(pk), young: true })),
+      ];
+      for (let i = 0; i < assets.length; i++) for (let j = i; j < assets.length; j++) for (let k = j; k < assets.length; k++) {
+        const pack = [...new Set([assets[i], assets[j], assets[k]])];
+        const v = pack.reduce((a, x) => a + x.value, 0);
+        if (v < want * 0.8 || v > want * 1.25) continue;
+        const A = { team: from, players: [p], picks: [] }, B = { team: u, players: pack.filter(x => x.player).map(x => x.player), picks: pack.filter(x => x.pick).map(x => x.pick) };
+        if (tradeRulesErr(L, A, B) || ntcRefusal(L, A, B)) continue;
+        const score = Math.abs(v - want) + pack.length * want * 0.02 - pack.filter(x => x.young).length * want * 0.04 + (r.to.indexOf(code)) * want * 0.01;
+        if (!best || score < best.score) best = { A, B, score, u };
+      }
+    }
+    if (!best) continue;   // nothing works yet: the next file tries again
+    const rec = executeTrade(best.A, best.B, yr);
+    for (const m of rec.moved) tradeMorale(L, m.p, m.to, m.from);
+    markAway(rec.moved); resetRotation(from); resetRotation(best.u);
+    p.tradeRequested = false; if (p.season) p.season.onTradeBlock = typeof p.season.onTradeBlock === 'boolean' ? false : 0;
+    const back = [...best.B.players.map(x => playerName(x)), ...best.B.picks.map(pk => pickLabel(pk))].join(', ');
+    r.done = `the ${teamFull(best.u)} are trading for ${playerName(p)}, sending ${back} to ${from.city || from.name}.`;
+    did = true;
+    setTimeout(() => toast('🚨 Trade', `${best.u.shortName} get ${playerName(p)} from ${from.shortName}`, 5000), 1500);
+  }
+  storySave(st);
+  if (did) state.dirty = true;
+  return did;
+}
+
 async function seasonIndex() {
   if (state.seasonIdx) return state.seasonIdx;
   const r = await fetch('data/seasons/index.json', { cache: 'no-cache' });
@@ -4409,6 +4486,9 @@ actions.startTeam = async d => {
   // Every team's rotation from the real season so far (starters, minutes, who's hurt).
   for (const tt of league().teams) if (tt.roster.length) applyLu(tt, defaultPlan(tt));
   try { localStorage.setItem(START_KEY(), JSON.stringify({ season: P.season, date: P.date, day: league().season.currentDay })); } catch { /* ignore */ }
+  // The start date's story (a trade request, the rumor mill): kept with this save for Hoop Gram and the trade to come.
+  const st = state.seasonIdx?.seasons?.find(x => x.id === P.season)?.starts?.find(x => x.date === P.date)?.story;
+  if (st) storySave({ ...st, day: league().season.currentDay, yr: league().season.currentYear });
   state.dirty = true;
   goHome();
 };
@@ -12609,7 +12689,8 @@ function rumorPosts(L) {
   list.sort((x, y) => y.heat - x.heat || y.level - x.level);
   const top = list.slice(0, 16), posts = [];
   for (const r of top) { const html = rumorPost(r, 0, top); if (html) posts.push({ html, key: `r:${rumorKey(r)}`, mine: mentionsMe(html) }); }
-  return [...posts.filter(x => x.mine), ...posts.filter(x => !x.mine)].slice(0, 10);
+  const story = storyPosts(L).map(html => ({ html, key: 's', mine: false }));
+  return [...story, ...posts.filter(x => x.mine), ...posts.filter(x => !x.mine)].slice(0, 10 + story.length);
 }
 screens.rumors = () => {
   const L = league();
