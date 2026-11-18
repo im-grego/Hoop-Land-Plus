@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.368.3';
+const APP_VERSION = '0.368.4';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -1952,7 +1952,7 @@ function buildExport() {
   // its ceiling, and no news about a player who no longer exists anywhere in the save.
   if (!isCollege()) { PO.dedupeAwards(league()); PO.repairSave(league()); PO.trimFreeAgents(league(), shownLevel, state.leagueIdx); }
   // Smaller files: retirees nobody will look up again, in every league of the save (the college one too).
-  for (const X of state.data.seasonLeagues) { PO.trimRetirees(X, shownLevel); PO.trimCollegeRetirees(X); }
+  for (const X of state.data.seasonLeagues) { PO.trimRetirees(X, levelOf); PO.trimCollegeRetirees(X); }
   for (const X of state.data.seasonLeagues) pruneGhostNews(state.data, X);
   otherCoachFix();
   if (!isCollege()) pickWindow(league());
