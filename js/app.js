@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.368.6';
+const APP_VERSION = '0.369.0';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -84,8 +84,18 @@ const SHOWN_VERSION = 'Beta 0.2.2';
 const DEVLOG = [
   { v: 'Beta 0.2.2', sections: [
     ['Smaller Saves', [
-      'Files stop growing every season. On export the app clears free agents who\'ll never play (22 or older without an NBA game and under Lv 63, or two seasons without a game and under Lv 68)',
-      'Retirees under Lv 79 with no award, retired jersey or record leave the file; college players go five seasons after their last college game unless they won an award of their own or a national title. Hall of Famers always stay',
+      'Files stop growing every season. On export the app clears free agents who\'ll never play (under Lv 50 right away; 22 or older without an NBA game and under Lv 63; two seasons without a game and under Lv 68)',
+      'Retirees under Lv 79 with no award, retired jersey or record leave the file (under Lv 50, only a retired jersey keeps them), judged at the level they retired at. College players leave the season after their last college game unless they hold a record. Hall of Famers always stay',
+      'Computer teams no longer sign a drafted rookie under Lv 50',
+    ]],
+    ['Aging', [
+      'Second wind: now and then a declining veteran bounces back. His decline is pushed back two years (three on occasion), and a strong next season keeps it. Likelier after a standout year or in his first season with a new team',
+      'Stars don\'t stay at their peak forever: the game\'s automatic extra year for veterans who play every game now holds 40% of the time, a durable starter earns his year half the time, and past a regression age of 33 every extra year gets harder',
+      'Today\'s start date sets regression ages by tier (role players 30, starters 31, stars 32), with Luka, Shai, Wembanyama, Sengun and Cade at 33',
+    ]],
+    ['Draft Classes', [
+      'The 2027-2029 classes match the league\'s history: about one five-star a class, a few four-and-a-half stars and ten four-stars',
+      'Today\'s start date rates the 2025 and 2026 classes the same way',
     ]],
     ['Trades', [
       'No boomerangs: a team can\'t trade for a player it had in the last five seasons (it traded him away, he can\'t come right back). Trades you make yourself still can',
@@ -1850,7 +1860,8 @@ function cutWeakSeconds(L) {
   calFlags().weakSeconds = L.season.currentYear;
   const log = [], dy = draftYear(L), day = L.season.currentDay || 3;
   for (const t of L.teams.filter(x => !isUserTeam(x) && x.roster.length)) {
-    const weak = FA.signedRoster(t).filter(p => p.history?.draft?.rd === 2 && p.history.draft.yr >= dy - 2 && levelStarsOf(shownLevel(p)) <= 3 && (p.pot || 0) < 9 && !extPending(p));
+    // A rookie under Lv 50 (either round) isn't signed: he goes, and the export clears him from free agency.
+    const weak = FA.signedRoster(t).filter(p => ((p.history?.draft?.rd === 2 && p.history.draft.yr >= dy - 2 && levelStarsOf(shownLevel(p)) <= 3 && (p.pot || 0) < 9) || (p.history?.draft?.rd > 0 && p.history.draft.yr >= dy && shownLevel(p) < 50)) && !extPending(p));
     for (const p of weak) {
       FA.cutPlayer(L, t, p);
       // A late-summer price (about 60% of his ask, never under the minimum) that fits before the team's next tax line.
@@ -1861,8 +1872,8 @@ function cutWeakSeconds(L) {
         const sal = price(up);
         FA.signPlayer(L, up, t, { tid: t.id, sal, yrs: 1, opt: 0 }, day);
         lockSigning(up, 'Signed this offseason');
-        log.push(`${t.shortName} cut 2nd-rounder ${playerName(p)} (Lv ${shownLevel(p)}) and signed ${playerName(up)} (Lv ${shownLevel(up)}, $${sal}M)`);
-      } else log.push(`${t.shortName} cut 2nd-rounder ${playerName(p)} (Lv ${shownLevel(p)})`);
+        log.push(`${t.shortName} cut ${p.history.draft.rd === 1 ? '1st' : '2nd'}-rounder ${playerName(p)} (Lv ${shownLevel(p)}) and signed ${playerName(up)} (Lv ${shownLevel(up)}, $${sal}M)`);
+      } else log.push(`${t.shortName} cut ${p.history.draft.rd === 1 ? '1st' : '2nd'}-rounder ${playerName(p)} (Lv ${shownLevel(p)})`);
     }
   }
   if (log.length) { (calFlags().dumpLog ||= []).push(...log); state.dirty = true; }
@@ -6568,6 +6579,11 @@ function campHoldouts(team) {
     .sort((a, b) => shownLevel(b) - shownLevel(a));
 }
 setHoldouts(t => (state.data && !isCollege() && isUserTeam(t) ? campHoldouts(t) : []));
+// Second winds, kept per save: { pid: { yr, amt } } (yr = the season he earned it after). The next offseason reads it to
+// see whether he held it.
+const windKey = () => `hlc:wind:${saveTag()}`;
+function windStore() { try { return JSON.parse(localStorage.getItem(windKey())) || {}; } catch { return {}; } }
+function windSave(v) { try { localStorage.setItem(windKey(), JSON.stringify(v)); } catch { /* ignore */ } }
 function applyBump(seed) {
   const li = state.leagueIdx;
   // Start from the original file each time so re-rolls don't stack.
@@ -6576,7 +6592,9 @@ function applyBump(seed) {
   // Ceilings that are all used up get re-spread to the level his potential allows.
   if (state.params.dynamicCeilings !== false) for (const p of vetPlayers()) refitCeilings(p);
   const devT = tierNow('dev');
+  const winds = windStore(), lsy = lastSeasonYear();
   const entries = bumpEntries().map(e => ({ ...e, ...bumpContext(), spend: state.params.spendCpuPoints && !isUserTeam(e.team),
+    windPrev: winds[e.p.id]?.yr === lsy - 1 ? winds[e.p.id].amt : 0,
     ...(() => {
       const F = FX.facilityFx(e.team), u = isUserTeam(e.team), f = u ? fxNow() : null, a = e.p.age;
       // Every team's coach counts: yours with the tree on top, the rest by his own ratings.
@@ -6595,6 +6613,10 @@ function applyBump(seed) {
   const awards = runProgression(entries, { ...state.params, seed }, state.profiles[li]);
   state.potWhy = new Map(awards.why);
   state.injCut = new Map(awards.injCut || []);
+  state.wind = new Map(awards.wind || []); state.windEnd = new Map(awards.windEnd || []);
+  { for (const [pid, r] of Object.entries(winds)) if (r.yr >= lsy || r.yr < lsy - 1) delete winds[pid];   // a re-run starts clean
+    for (const [pid, amt] of state.wind) winds[pid] = { yr: lsy, amt };
+    windSave(winds); }
   { const all = glStore(), recs = all[lastSeasonYear()]; if (recs) { for (const [pid, r] of Object.entries(recs)) r.bumped = awards.gl.get(+pid) || 0; glSave(all); } }
   // A potential bump brings new ratings room with it, adding up to the new potential.
   if (state.params.dynamicCeilings !== false) for (const e of entries) potBumpCeilings(e.p, snapOf(e.p).pot);
@@ -6625,7 +6647,7 @@ function applyBump(seed) {
   const all = (state.awards[li] ||= new Map());
   for (const p of vetPlayers()) all.delete(p.id);
   for (const [k, v] of awards) all.set(k, v);
-  state.auto[li] = { seed, players, points, mine, longevity, earned, regDowns, potUps, potDowns, total: entries.length, spent: state.params.spendCpuPoints };
+  state.auto[li] = { seed, players, points, mine, longevity, earned, regDowns, potUps, potDowns, winds: state.wind.size, total: entries.length, spent: state.params.spendCpuPoints };
   state.dirty = true;
 }
 
@@ -7667,6 +7689,7 @@ screens.offseason = (args = {}) => {
               <dt>Potential ↓</dt><dd class="down">${auto.potDowns ?? 0}</dd>
               <dt>Regression age ↑</dt><dd class="up">${auto.longevity ?? 0}</dd>
               <dt>Regression age ↓</dt><dd class="down">${auto.regDowns ?? 0}</dd>
+              ${auto.winds ? `<dt>🔥 Second wind</dt><dd class="up">${auto.winds}</dd>` : ''}
             </dl>
             <button class="btn focus" data-act="nav" data-to="report">📋 Progression Report</button>
             ${P.commissioner ? '<button class="btn small" data-act="undoAuto">↺ Undo</button>' : ''}`
@@ -10095,7 +10118,15 @@ function longevityBadges(p, d, injury = true) {
   const why = POT_WHY[state.potWhy?.get(p.id)];
   return (d.regDelta ? `<span class="badge ${d.regDelta > 0 ? 'lvl' : 'down-b'}">${paused ? 'Regression paused' : `Regression age ${was}→${p.regressionAge}`}</span>` : '') +
     (d.potDelta > 0 ? '<span class="badge new">POT ▲</span>' : d.potDelta < 0 ? `<span class="badge down-b">POT ▼${why ? ` · ${why}` : ''}</span>` : '') +
-    (injury ? injuryBadge(p) : '') + injCutBadge(p);
+    (injury ? injuryBadge(p) : '') + injCutBadge(p) + windBadge(p);
+}
+// A second wind: his decline pushed back (he'll look better next season), or how last year's went.
+function windBadge(p) {
+  const w = state.wind?.get(p.id), end = state.windEnd?.get(p.id);
+  if (w) return `<span class="badge new">🔥 Second wind: decline pushed back ${w} years</span>`;
+  if (end === 'held') return '<span class="badge new">🔥 Held his second wind</span>';
+  if (end === 'faded') return '<span class="badge down-b">Second wind faded</span>';
+  return '';
 }
 // The injury took him under his own level: what it cost, and where he tops out now.
 function injCutBadge(p) {
