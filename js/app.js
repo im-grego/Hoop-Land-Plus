@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.368.4';
+const APP_VERSION = '0.368.5';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -95,6 +95,7 @@ const DEVLOG = [
       'Contract asks and fair salaries grow with the cap: at a $300M cap a star asks about $90M, and the minimum climbs to $5-7M over a decade',
     ]],
     ['Bug Fixes', [
+      'Retired players and Hall of Famers show at their peak again, not worn down by age',
       'Seattle\'s logo shows again: it\'s now built into the app.',
       'Fixed the save that got stuck after the play-in: a head coach the app hired (the coaching carousel, an expansion team\'s first coach) had no season record with his new team, and Hoop Land\'s Coach of the Year broke on it. New hires get their record, and any save that has the problem is repaired when it loads or exports',
       'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
