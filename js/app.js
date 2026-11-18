@@ -76,13 +76,16 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.368.1';
+const APP_VERSION = '0.368.2';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
 // the player hasn't looked at yet.
 const DEVLOG = [
   { v: 'Beta 0.2.2', sections: [
+    ['Smaller Saves', [
+      'Files stop growing every season: on export the app drops free agents who\'ll never play (24 or older without an NBA game and under Lv 60, or three seasons without a game and under Lv 65). Award winners always stay',
+    ]],
     ['Trades', [
       'No boomerangs: a team can\'t trade for a player it had in the last five seasons (it traded him away, he can\'t come right back). Trades you make yourself still can',
     ]],
@@ -1946,7 +1949,7 @@ function buildExport() {
   if (!isCollege()) { fixLineups(league()); pruneStaleNews(league()); proLeagueFlags(league()); clearStaleOptions(league()); }
   // Integrity before the game sees the file: one of each award, contract teams that match the roster, no rating above
   // its ceiling, and no news about a player who no longer exists anywhere in the save.
-  if (!isCollege()) { PO.dedupeAwards(league()); PO.repairSave(league()); pruneGhostNews(state.data, league()); }
+  if (!isCollege()) { PO.dedupeAwards(league()); PO.repairSave(league()); PO.trimFreeAgents(league(), shownLevel, state.leagueIdx); pruneGhostNews(state.data, league()); }
   otherCoachFix();
   if (!isCollege()) pickWindow(league());
   // The game made the season's schedule before the expansion draft: new teams would have no games. Rebuild it.
