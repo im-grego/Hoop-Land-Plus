@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.369.1';
+const APP_VERSION = '0.369.2';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -97,6 +97,7 @@ const DEVLOG = [
       'The 2027-2029 classes match the league\'s history: about one five-star a class, a few four-and-a-half stars and ten four-stars',
       'Today\'s start date rates the 2025 and 2026 classes the same way',
       'The 2027 class\'s potentials follow the latest mocks: Tyran Stokes is a four-and-a-half star (not five), Quentin Coleman joins him there, and Cameron Williams is a raw four-star',
+      'Draft prospects whose arms and legs kept their old skin tone after the league match now match their skin (tattoos stay)',
     ]],
     ['Trades', [
       'No boomerangs: a team can\'t trade for a player it had in the last five seasons (it traded him away, he can\'t come right back). Trades you make yourself still can',
