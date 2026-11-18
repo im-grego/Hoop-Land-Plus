@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.63';
+const APP_VERSION = '0.367.64';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -117,6 +117,7 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
+      'Seattle\'s logo shows again: it\'s now built into the app.',
       'Fixed the save that got stuck after the play-in: a head coach the app hired (the coaching carousel, an expansion team\'s first coach) had no season record with his new team, and Hoop Land\'s Coach of the Year broke on it. New hires get their record, and any save that has the problem is repaired when it loads or exports',
       'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
       'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
