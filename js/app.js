@@ -3197,7 +3197,7 @@ async function realClassCheck() {
   state.dirty = true;
   render();
   const c = RDC.potCounts(varied);
-  toast(`🎓 The ${yr} draft class is in`, `${varied.length} prospects · ${c[10] || 0} five-star, ${c[9] || 0} four-and-a-half.`, 4500);
+  toast(`🎓 The ${yr} draft class is in`, `${varied.length} prospects · ${c[10] || 0} 5-star, ${c[9] || 0} 4.5-star.`, 4500);
 }
 // The realistic expansion: Seattle and Las Vegas, announced for the 2029 offseason (the save's 2030, the 2029 draft), a
 // summer after the 2028 Olympics so the two don't land in the same offseason.
