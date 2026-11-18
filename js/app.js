@@ -76,48 +76,42 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.369.4';
+const APP_VERSION = '0.369.5';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
 // the player hasn't looked at yet.
 const DEVLOG = [
   { v: 'Beta 0.2.2', sections: [
-    ['Smaller Saves', [
-      'Files stop growing every season. On export the app clears free agents who\'ll never play (under Lv 50 right away; 22 or older without an NBA game and under Lv 63; two seasons without a game and under Lv 68)',
-      'Retirees under Lv 79 with no award, retired jersey or record leave the file (under Lv 50, only a retired jersey keeps them), judged at the level they retired at. College players leave the season after their last college game unless they hold a record. Hall of Famers always stay',
-      'Computer teams no longer sign a drafted rookie under Lv 50',
+    ['Bug Fixes', [
+      'Saves no longer get stuck after the play-in (coaches the app hires now get their season record), and saves that already have the problem are repaired on load',
+      'Stuck save? Tap Start the Playoffs to set the first round from the standings',
+      'Awards count once: no more rookies with five Sixth Man awards',
+      'Clean saves: contracts follow traded players, no rating sits above its ceiling, and news about removed players is dropped',
+      'Expanded leagues play 82 games again, take clean team numbers, and never leave a division with four teams',
+      'Potential is a hard cap again: a 4.5-star tops out at Lv 93',
+      'Retired players and Hall of Famers show at their peak',
+      'Draft prospects no longer arrive at Lv 86 (an average 5-star comes in near 80, a 4-star near 72)',
+      'Seattle\'s logo is built into the app',
+      'On PC the app stays centered',
     ]],
     ['Aging', [
-      'Second wind: now and then a declining veteran bounces back. His decline is pushed back two years (three on occasion), and a strong next season keeps it. Likelier after a standout year or in his first season with a new team',
-      'Stars don\'t stay at their peak forever: the game\'s automatic extra year for veterans who play every game now holds 40% of the time, a durable starter earns his year half the time, and past a regression age of 33 every extra year gets harder',
-      'Today\'s start date sets regression ages by tier (role players 30, starters 31, stars 32), with Luka, Shai, Wembanyama, Sengun and Cade at 33',
+      'Second wind: a declining veteran can bounce back, and a strong next season keeps it',
+      'Stars age more realistically: extra years past a regression age of 33 are harder to earn',
+      'Today\'s start date sets regression ages by tier, with Luka, Shai, Wembanyama, Sengun and Cade at 33',
     ]],
     ['Draft Classes', [
-      'The 2027-2029 classes match the league\'s history: about one five-star a class, a few four-and-a-half stars and ten four-stars',
-      'Today\'s start date rates the 2025 and 2026 classes the same way',
-      'The 2027 class\'s potentials follow the latest mocks: Tyran Stokes is a four-and-a-half star (not five), Quentin Coleman joins him there, and Cameron Williams is a raw four-star. Anyone the mocks have in the lottery is at least a four-star',
-      'Draft prospects whose arms and legs kept their old skin tone after the league match now match their skin (tattoos stay)',
+      '2027-2029 classes match league history: about one 5-star, a few 4.5-stars and ten 4-stars a class',
+      '2027 follows the latest mocks: Stokes and Coleman are 4.5-stars, Cameron Williams is a raw 4-star, and every lottery prospect is at least a 4-star',
+      'Prospects\' arms and legs now match their skin tone (tattoos stay)',
     ]],
-    ['Trades', [
-      'No boomerangs: a team can\'t trade for a player it had in the last five seasons (it traded him away, he can\'t come right back). Trades you make yourself still can',
+    ['Trades & Salaries', [
+      'No boomerangs: a team can\'t trade for a player it had in the last five seasons (your own trades still can)',
+      'The cap grows slower after 2035 (about $400M by 2050), and contract asks grow with it',
     ]],
-    ['Salaries', [
-      'The salary cap grows about 5% a year for five seasons past 2030, then 3%: a 2050 cap lands near $400M instead of $550M',
-      'Contract asks and fair salaries grow with the cap: at a $300M cap a star asks about $90M, and the minimum climbs to $5-7M over a decade',
-    ]],
-    ['Bug Fixes', [
-      'Potential is a hard cap again: offseason progression never takes a player past the level his potential allows (a 4.5-star tops out at Lv 93), and a potential drop trims his ceilings with it',
-      'Retired players and Hall of Famers show at their peak again, not worn down by age',
-      'Seattle\'s logo shows again: it\'s now built into the app.',
-      'Fixed the save that got stuck after the play-in: a head coach the app hired (the coaching carousel, an expansion team\'s first coach) had no season record with his new team, and Hoop Land\'s Coach of the Year broke on it. New hires get their record, and any save that has the problem is repaired when it loads or exports',
-      'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
-      'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
-      'Stuck after the play-in? Load the save and tap Start the Playoffs: the app sets the first round from the standings and the play-in so Hoop Land can go on',
-      'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
-      'Expanded leagues play 82 games again: when the game schedules 32 teams at 88, the app rebuilds an 82-game schedule (41 home) on export before the season starts',
-      'On PC the app stays centered: the page scrollbar is hidden (scrolling still works)',
-      'Draft prospects no longer come in at Lv 86: only a fully ready five-star reaches it (an average five-star is about 80, a four-star 72), and a class already in your save is refit',
+    ['Smaller Saves', [
+      'Export clears free agents who\'ll never play, retirees under Lv 79 with no award, retired jersey or record, and college players a season after they leave school',
+      'Computer teams don\'t sign drafted rookies under Lv 50',
     ]],
   ] },
   { v: 'Beta 0.2.1', sections: [
