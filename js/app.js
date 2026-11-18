@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.60';
+const APP_VERSION = '0.367.61';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -117,6 +117,7 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
+      'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
       'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
       'Stuck after the play-in? Load the save and tap Start the Playoffs: the app sets the first round from the standings and the play-in so Hoop Land can go on',
       'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
@@ -1714,6 +1715,13 @@ function lineupOk(t) {
 // The game writes its offseason stories (options, extensions, picks, signings) before the app's trades and releases,
 // and its own files never hold one that's gone stale. A story naming a team the player has since left (traded,
 // released, unsigned) goes before export; retirements from a team stay, and so do stories with no team.
+function pruneGhostNews(D, L) {
+  const ids = new Set();
+  for (const X of D.seasonLeagues) for (const p of [...X.teams.flatMap(t => t.roster), ...(X.freeAgents || []), ...(X.retirees || []), ...(X.hallOfFame || []), ...(X.draftClass || [])]) ids.add(p.id);
+  const n0 = (L.season.news || []).length;
+  L.season.news = (L.season.news || []).filter(n => !(n.pid > 0 && !ids.has(n.pid)));
+  return n0 - L.season.news.length;
+}
 function pruneStaleNews(L) {
   const at = new Map();
   for (const t of L.teams) for (const p of t.roster) at.set(p.id, t.id);
@@ -1917,6 +1925,9 @@ function buildExport() {
   if (!isCollege()) settleRetirees(league(), true);   // anyone still retiring off a roster (yours included) goes now
   if (!isCollege() && league().season.phase === 6) { exportCuts(league()); cutWeakSeconds(league()); floorFill(league()); gameCapCheck(league(), league().season.salaryCap); rebuildBlock(league()); for (const t of league().teams) if (!isUserTeam(t) && t.roster.length) applyLu(t, defaultPlan(t)); }
   if (!isCollege()) { fixLineups(league()); pruneStaleNews(league()); proLeagueFlags(league()); clearStaleOptions(league()); }
+  // Integrity before the game sees the file: one of each award, contract teams that match the roster, no rating above
+  // its ceiling, and no news about a player who no longer exists anywhere in the save.
+  if (!isCollege()) { PO.dedupeAwards(league()); PO.repairSave(league()); pruneGhostNews(state.data, league()); }
   if (!isCollege()) pickWindow(league());
   // The game made the season's schedule before the expansion draft: new teams would have no games. Rebuild it.
   if (!isCollege() && needsSchedule(league())) {
@@ -9536,7 +9547,7 @@ actions.fanFinish = async () => {
     if (!w || !to) continue;
     const p = w.p;
     p.num = jerseyNumber(to, p);
-    p.tid = to.id; p.linePos = to.roster.length;
+    p.tid = to.id; p.linePos = to.roster.length; if (p.contract?.tid) p.contract.tid = to.id;
     to.roster.push(p);
     const { row, stint } = stintOf(p);
     if (!w.t) {
@@ -11098,7 +11109,7 @@ function glReturn(L, pid, rec) {
   const t = L.teams.find(x => x.id === rec.tid);
   if (!t || !rec.player || t.roster.some(x => x.id === +pid)) return false;
   const p = rec.player;
-  p.tid = t.id; p.status = FA.STATUS_SIGNED; p.linePos = t.roster.length;
+  p.tid = t.id; p.status = FA.STATUS_SIGNED; p.linePos = t.roster.length; if (p.contract?.tid) p.contract.tid = t.id;
   t.roster.push(p);
   delete rec.player;
   return true;
@@ -13754,7 +13765,7 @@ function movePlayerTo(p, to) {
   if (to === team) return;
   if (team) team.roster.splice(team.roster.indexOf(p), 1); else if ((L.freeAgents || []).includes(p)) L.freeAgents.splice(L.freeAgents.indexOf(p), 1);
   if (to) {
-    p.tid = to.id; p.status = FA.STATUS_SIGNED; p.linePos = to.roster.length; to.roster.push(p);
+    p.tid = to.id; p.status = FA.STATUS_SIGNED; p.linePos = to.roster.length; if (p.contract?.tid) p.contract.tid = to.id; to.roster.push(p);
     if (p.num == null || to.roster.some(x => x !== p && x.num === p.num)) p.num = jerseyNumber(to, p);
     if (p.contract && !(p.contract.yrs > 0)) { p.contract.yrs = 1; p.contract.sal ||= 1; }
   } else {
@@ -24647,7 +24658,7 @@ $app.addEventListener('change', e => {
     if (to === team) return;
     if (team) team.roster.splice(team.roster.indexOf(p), 1); else L.freeAgents.splice(L.freeAgents.indexOf(p), 1);
     if (to) {
-      p.tid = to.id; p.status = FA.STATUS_SIGNED; p.linePos = to.roster.length; to.roster.push(p);
+      p.tid = to.id; p.status = FA.STATUS_SIGNED; p.linePos = to.roster.length; if (p.contract?.tid) p.contract.tid = to.id; to.roster.push(p);
       if (p.num == null || to.roster.some(x => x !== p && x.num === p.num)) p.num = jerseyNumber(to, p);
       if (p.contract && !(p.contract.yrs > 0)) { p.contract.yrs = 1; p.contract.sal ||= 1; }
     } else {
