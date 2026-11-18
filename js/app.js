@@ -19,7 +19,7 @@ import {
 import { mentorPairs, runMentorship } from './mentorship.js';
 import { buildStorylines, seasonLine } from './storylines.js';
 import { applyDraft, recordDraftPick, newLiveDraft, clockIndex, makeSelection, takenIds, tradeableProspects, livePicks, slotPick, tradeUpOffers, rightsTradeOffer, consolidationOffer } from './livedraft.js';
-import { movePlayer, freshStint, setScarcity, setTradeHook, isCornerstone, slotValue, playerValue, cpuAccepts, executeTrade, undoTrade, contractValue, fairSalary, tagGap, CONTRACT_WEIGHT, nowValue } from './trades.js';
+import { movePlayer, freshStint, setScarcity, setTradeHook, isCornerstone, slotValue, playerValue, cpuAccepts, executeTrade, undoTrade, contractValue, fairSalary, setSalaryScale, tagGap, CONTRACT_WEIGHT, nowValue } from './trades.js';
 import * as FA from './freeagency.js';
 import { destinationParts, destinationGrade } from './destination.js';
 import * as TR from './traderules.js';
@@ -76,12 +76,29 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.64';
+const APP_VERSION = '0.368.0';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
-const SHOWN_VERSION = 'Beta 0.2.1';
+const SHOWN_VERSION = 'Beta 0.2.2';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
 // the player hasn't looked at yet.
 const DEVLOG = [
+  { v: 'Beta 0.2.2', sections: [
+    ['Salaries', [
+      'The salary cap grows about 5% a year for five seasons past 2030, then 3%: a 2050 cap lands near $400M instead of $550M',
+      'Contract asks and fair salaries grow with the cap: at a $300M cap a star asks about $90M, and the minimum climbs to $5-7M over a decade',
+    ]],
+    ['Bug Fixes', [
+      'Seattle\'s logo shows again: it\'s now built into the app.',
+      'Fixed the save that got stuck after the play-in: a head coach the app hired (the coaching carousel, an expansion team\'s first coach) had no season record with his new team, and Hoop Land\'s Coach of the Year broke on it. New hires get their record, and any save that has the problem is repaired when it loads or exports',
+      'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
+      'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
+      'Stuck after the play-in? Load the save and tap Start the Playoffs: the app sets the first round from the standings and the play-in so Hoop Land can go on',
+      'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
+      'Expanded leagues play 82 games again: when the game schedules 32 teams at 88, the app rebuilds an 82-game schedule (41 home) on export before the season starts',
+      'On PC the app stays centered: the page scrollbar is hidden (scrolling still works)',
+      'Draft prospects no longer come in at Lv 86: only a fully ready five-star reaches it (an average five-star is about 80, a four-star 72), and a class already in your save is refit',
+    ]],
+  ] },
   { v: 'Beta 0.2.1', sections: [
     ['Start a Franchise', [
       'New start dates: Nov 14 and Nov 17, with real results, standings and stats through the night before and that day\'s injury report',
@@ -117,15 +134,6 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
-      'Seattle\'s logo shows again: it\'s now built into the app.',
-      'Fixed the save that got stuck after the play-in: a head coach the app hired (the coaching carousel, an expansion team\'s first coach) had no season record with his new team, and Hoop Land\'s Coach of the Year broke on it. New hires get their record, and any save that has the problem is repaired when it loads or exports',
-      'Saves leave the app clean: a traded or signed player\'s contract follows him to his new team, each award counts once, no rating sits above its ceiling, and news about players no longer in the save is dropped',
-      'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
-      'Stuck after the play-in? Load the save and tap Start the Playoffs: the app sets the first round from the standings and the play-in so Hoop Land can go on',
-      'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
-      'Expanded leagues play 82 games again: when the game schedules 32 teams at 88, the app rebuilds an 82-game schedule (41 home) on export before the season starts',
-      'On PC the app stays centered: the page scrollbar is hidden (scrolling still works)',
-      'Draft prospects no longer come in at Lv 86: only a fully ready five-star reaches it (an average five-star is about 80, a four-star 72), and a class already in your save is refit',
       'A step whose screen breaks now offers a Skip instead of leaving you stuck',
       'Combine Trending posts lay out like the rest of Hoop Gram',
       'Live draft: four teams in the strip at the first pick, and the team picking stays lit until the next team is on the clock',
@@ -953,7 +961,7 @@ function render() {
   resumeSoon();
   loadFaces();
   document.documentElement.dataset.px = state.params.pixelIcons === false ? 'off' : 'on';
-  if (state.data) { FA.setQualifyingOffers(optStore().qo); FA.setCapSystem(isComplete() && state.params.capSystem !== false && !isCollege()); FA.setComplete(isComplete() && !isCollege(), FA.capLines(league()).cap); FX.setFacilitiesOn(isComplete() && !isCollege()); if (!isCollege()) syncGrudges(); if (!isCollege()) syncDead(); FA.setHoldTeams(league().teams.filter(isUserTeam).map(t => t.id)); FA.setHoldDay(league().season.phase === 6 ? league().season.currentDay : 0); syncTpes(); syncExpansion(); if (!isCollege()) { fitClassIncoming(); realClassCheck(); } }
+  if (state.data) { FA.setQualifyingOffers(optStore().qo); FA.setCapSystem(isComplete() && state.params.capSystem !== false && !isCollege()); FA.setComplete(isComplete() && !isCollege(), FA.capLines(league()).cap); setSalaryScale(FA.capSystemOn() ? Math.max(0.6, FA.capLines(league()).cap / 165) : 1); FX.setFacilitiesOn(isComplete() && !isCollege()); if (!isCollege()) syncGrudges(); if (!isCollege()) syncDead(); FA.setHoldTeams(league().teams.filter(isUserTeam).map(t => t.id)); FA.setHoldDay(league().season.phase === 6 ? league().season.currentDay : 0); syncTpes(); syncExpansion(); if (!isCollege()) { fitClassIncoming(); realClassCheck(); } }
   if (state.data && isCollege() && state.cal) { try { localStorage.setItem(collegeCalKey(), JSON.stringify(state.cal)); } catch { /* ignore */ } }
   if (state.data && !isCollege()) { seasonDrift(); cpuComebacks(); cpuNumbers(); cpuJerseys(); realAllStarHost(); if (state.retFixed !== saveTag()) { state.retFixed = saveTag(); fixRetiredNumbers(); } if (state.awFixed !== saveTag()) { state.awFixed = saveTag(); if (PO.dedupeAwards(league())) state.dirty = true; const r = PO.repairSave(league()); if (r.contracts || r.ceilings || r.coaches) state.dirty = true; if (otherCoachFix()) state.dirty = true; } glSettle(); taxSettle(); cpuShifts(); }   // once an offseason each (the G League once a season)
   if (state.data && !isCollege()) { careerSync(); syncScarcity(); poSettle(); campAuto(); }
