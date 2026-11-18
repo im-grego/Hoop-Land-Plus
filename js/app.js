@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.56';
+const APP_VERSION = '0.367.57';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -117,6 +117,7 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
+      'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
       'Expanded leagues play 82 games again: when the game schedules 32 teams at 88, the app rebuilds an 82-game schedule (41 home) on export before the season starts',
       'On PC the app stays centered: the page scrollbar is hidden (scrolling still works)',
       'Draft prospects no longer come in at Lv 86: only a fully ready five-star reaches it (an average five-star is about 80, a four-star 72), and a class already in your save is refit',
@@ -8909,6 +8910,7 @@ actions.expCreate = async () => {
   // Built on a mid-table team's structure (every team field the game expects), with everything of its own reset.
   const tpl = [...L.teams].sort((a, b) => (teamRecord(a).pct ?? 0.5) - (teamRecord(b).pct ?? 0.5))[Math.floor(L.teams.length / 2)];
   // Each new team's id comes after every team and the All-Star teams.
+  EXP.clearStarIds(L, x.teams.length);
   const made = x.teams.map(s => { const t = EXP.makeTeam(L, s, tpl, EXP.nextTeamId(L)); L.teams.push(t); return t; });
   fixTeamCount(L);
   // A returning franchise takes its history back (Seattle from Oklahoma City).
@@ -8921,6 +8923,17 @@ actions.expCreate = async () => {
   const moved = plan.filter(m => m.t && m.t.division !== m.division);
   x.realigned = moved.map(m => ({ tid: m.t.id, from: m.t.division, to: m.division }));
   for (const m of moved) m.t.division = m.division;
+  // No division under five: a conference's short division takes a team from its six-team division (a new team first,
+  // else the one nearest it), so a move that empties one spot (Minnesota leaving the Northwest) is filled.
+  const half = Math.ceil(L.divisions.length / 2), confDivs = c => L.divisions.map((_, i) => i).filter(i => (i < half ? 0 : 1) === c);
+  const near = (t, d) => { const xs = L.teams.filter(o => o.division === d && o !== t); return xs.reduce((s, o) => s + Math.hypot((o.location?.x || 0) - (t.location?.x || 0), (o.location?.y || 0) - (t.location?.y || 0)), 0) / Math.max(1, xs.length); };
+  for (const c of [0, 1]) for (let guard = 0; guard < 6; guard++) {
+    const size = d => L.teams.filter(t => t.division === d).length, ds = confDivs(c);
+    const lo = ds.reduce((a, d) => (size(d) < size(a) ? d : a)), hi = ds.reduce((a, d) => (size(d) > size(a) ? d : a));
+    if (size(lo) >= 5 || size(hi) <= 5) break;
+    const pool = L.teams.filter(t => t.division === hi), pick = pool.filter(t => made.includes(t)).sort((a, b) => near(a, lo) - near(b, lo))[0] || pool.sort((a, b) => near(a, lo) - near(b, lo))[0];
+    moved.push({ t: pick, division: lo }); x.realigned.push({ tid: pick.id, from: hi, to: lo }); pick.division = lo;
+  }
   const mvText = !moved.length ? '' : moved.length > 3 ? `; the divisions are redrawn by the map (${moved.length} teams move)` : `; ${moved.map(m => `${m.t.shortName} move to the ${L.divisions[m.division]}`).join(', ')}`;
   const me = myTeam();
   if (x.role === 'both') made.forEach(t => state.userTeams.add(t.id));
