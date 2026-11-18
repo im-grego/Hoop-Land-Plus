@@ -76,7 +76,7 @@ import { presserQuestions, presserStories, promiseStories, leagueGram, teamSitua
 import { runCombine, hoopGram, DRILLS, MEASURES, inchStr, fracIn, fmtDrill, medicalFlag, combinePct, pctTier } from './predraft.js';
 import { BUILT_IN_APP_KEY, dropboxFetchShared, dropboxShareLink, dropboxUploadFixed, dropboxConfig, saveDropboxConfig, dropboxConnected, disconnectDropbox, dropboxAuthUrl, dropboxFinishAuth, dropboxUpload, dropboxPath, dropboxPut, dropboxGet } from './dropbox.js';
 
-const APP_VERSION = '0.367.58';
+const APP_VERSION = '0.367.59';
 // What players see: the public beta's own count. APP_VERSION stays the build number (cache, bug reports).
 const SHOWN_VERSION = 'Beta 0.2.1';
 // The dev log: what each release added, biggest first. Tapping the version opens it; a red dot marks a release
@@ -117,6 +117,7 @@ const DEVLOG = [
       'Privacy policy at hooplandplus.com/privacy.html: your saves stay on your device',
     ]],
     ['Bug Fixes', [
+      'Awards no longer pile up: a season award repeated by Hoop Land (one player with Sixth Man five times) is counted once when the save loads',
       'Stuck after the play-in? Load the save and tap Start the Playoffs: the app sets the first round from the standings and the play-in so Hoop Land can go on',
       'Expansion: the new teams take the next team numbers (the All-Star teams move up), and a realignment never leaves a division with four teams',
       'Expanded leagues play 82 games again: when the game schedules 32 teams at 88, the app rebuilds an 82-game schedule (41 home) on export before the season starts',
@@ -951,7 +952,7 @@ function render() {
   document.documentElement.dataset.px = state.params.pixelIcons === false ? 'off' : 'on';
   if (state.data) { FA.setQualifyingOffers(optStore().qo); FA.setCapSystem(isComplete() && state.params.capSystem !== false && !isCollege()); FA.setComplete(isComplete() && !isCollege(), FA.capLines(league()).cap); FX.setFacilitiesOn(isComplete() && !isCollege()); if (!isCollege()) syncGrudges(); if (!isCollege()) syncDead(); FA.setHoldTeams(league().teams.filter(isUserTeam).map(t => t.id)); FA.setHoldDay(league().season.phase === 6 ? league().season.currentDay : 0); syncTpes(); syncExpansion(); if (!isCollege()) { fitClassIncoming(); realClassCheck(); } }
   if (state.data && isCollege() && state.cal) { try { localStorage.setItem(collegeCalKey(), JSON.stringify(state.cal)); } catch { /* ignore */ } }
-  if (state.data && !isCollege()) { seasonDrift(); cpuComebacks(); cpuNumbers(); cpuJerseys(); realAllStarHost(); if (state.retFixed !== saveTag()) { state.retFixed = saveTag(); fixRetiredNumbers(); } glSettle(); taxSettle(); cpuShifts(); }   // once an offseason each (the G League once a season)
+  if (state.data && !isCollege()) { seasonDrift(); cpuComebacks(); cpuNumbers(); cpuJerseys(); realAllStarHost(); if (state.retFixed !== saveTag()) { state.retFixed = saveTag(); fixRetiredNumbers(); } if (state.awFixed !== saveTag()) { state.awFixed = saveTag(); if (PO.dedupeAwards(league())) state.dirty = true; } glSettle(); taxSettle(); cpuShifts(); }   // once an offseason each (the G League once a season)
   if (state.data && !isCollege()) { careerSync(); syncScarcity(); poSettle(); campAuto(); }
   const top = state.stack[state.stack.length - 1];
   const view = `${state.stack.length}:${top.name}:${top.args?.tab ?? ''}:${top.name === 'fa' ? '' : top.args?.view ?? ''}:${top.args?.id ?? ''}`;
